@@ -306,16 +306,28 @@ if run_button:
                         api_key=GROQ_API_KEY,
                         base_url="https://api.groq.com/openai/v1"
                     )
-                    completion = groq_client.beta.chat.completions.parse(
+                    
+                    schema_json_str = json.dumps(ImpactAnalysisResult.model_json_schema(), ensure_ascii=False, indent=2)
+                    groq_prompt = (
+                        f"{prompt}\n\n"
+                        f"VASTAUSVAATIMUS: Palauta vastauksesi TÄSMÄLLEEN seuraavan JSON-skeeman mukaisena objektina:\n"
+                        f"```json\n{schema_json_str}\n```"
+                    )
+
+                    completion = groq_client.chat.completions.create(
                         model="llama-3.3-70b-versatile",
                         messages=[
                             {"role": "system", "content": system_instruction},
-                            {"role": "user", "content": prompt}
+                            {"role": "user", "content": groq_prompt}
                         ],
-                        response_format=ImpactAnalysisResult,
+                        response_format={"type": "json_object"},
                         temperature=0.2,
                     )
-                    st.session_state.analysis_result = completion.choices[0].message.parsed
+                    
+                    raw_content = completion.choices[0].message.content
+                    parsed_data = json.loads(raw_content)
+                    st.session_state.analysis_result = ImpactAnalysisResult(**parsed_data)
+                    
                     st.session_state.used_model = "llama-3.3-70b-versatile (Groq)"
                     status_container.success("Analyysi valmis! (Malli: `llama-3.3-70b-versatile`)")
                     time.sleep(1)
