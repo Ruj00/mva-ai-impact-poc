@@ -1,13 +1,20 @@
-# styles.py
 import streamlit as st
 
 def load_custom_css():
     st.markdown("""
         <style>
-            /* Piilotetaan Streamlitin brändäykset ja yläpalkin valikot */
+            /* Piilotetaan Streamlitin brändäykset */
             #MainMenu {visibility: hidden;}
             footer {visibility: hidden;}
-            header {visibility: hidden;}
+
+            /* Korjataan bugi: Varmistetaan, että sivupalkin avausnuoli/painike näkyy aina eikä katoa */
+            [data-testid="collapsedControl"] {
+                display: block !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+                z-index: 999999;
+                color: #94a3b8;
+            }
 
             /* Mukautettu tyyli sivupalkille */
             [data-testid="stSidebar"] {
