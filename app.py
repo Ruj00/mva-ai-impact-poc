@@ -89,6 +89,7 @@ class ImpactAnalysisResult(BaseModel):
     overall_risk: str = Field(description="Kokonaisriski: 'KORKEA', 'KOHTALAINEN' tai 'MATALA'")
     affected_systems_count: int = Field(description="Vaikutuksen alaisten järjestelmien kokonaismäärä")
     summary: str = Field(description="Tiivis 2-3 lauseen yhteenveto muutoksen vaikutuksista")
+    strategic_alignment: str = Field(description="Arvio siitä, miten muutos tukee tai haastaa organisaation strategisia tavoitteita.")
     impacts: list[SystemImpact] = Field(description="Lista kaikista järjestelmistä joihin muutos vaikuttaa")
     recommendations: list[str] = Field(description="3-5 konkreettista jatkotoimenpidesuositusta")
     dot_graph: str = Field(
@@ -100,13 +101,11 @@ class ImpactAnalysisResult(BaseModel):
 # ==============================================================================
 st.sidebar.title("Asetukset")
 
-# Tekoälyntarjoajan valinta
 ai_provider = st.sidebar.selectbox(
     "Valitse tekoälymalli",
     ["Google Gemini", "OpenAI ChatGPT", "Groq (Llama 3)"]
 )
 
-# Tarkistetaan valitun tarjoajan API-avain automaattisesti taustalta
 if ai_provider == "Google Gemini":
     if GEMINI_API_KEY:
         st.sidebar.success("Gemini API-avain aktiivinen")
@@ -135,6 +134,7 @@ scenario_choice = st.sidebar.selectbox(
         "Valitse skenaario...",
         "Skenaario 1: CRM-järjestelmän vaihto SaaS-malliin",
         "Skenaario 2: Laskutusmoottorin rajapintamuutos",
+        "Skenaario 3: Uuden HR-järjestelmän käyttöönotto",
         "Kirjoita oma syöte"
     ]
 )
@@ -143,7 +143,9 @@ scenario_texts = {
     "Skenaario 1: CRM-järjestelmän vaihto SaaS-malliin": 
         "Nykyinen Asiakashallinta (SYS-CRM) korvataan uudella pilvipohjaisella SaaS-järjestelmällä. Vanha SQL-suorarajapinta poistuu ja jatkossa tiedot siirretään REST API:n kautta erillisessä yöajossa.",
     "Skenaario 2: Laskutusmoottorin rajapintamuutos": 
-        "Laskutusmoottorin (SYS-LASKU) rajapintaa päivitetään siten, että asiakastunnisteen muoto muuttuu numeerisesta UUID-muotoon. Vanha rajapinta poistetaan käytöstä 1kk siirtymäajalla."
+        "Laskutusmoottorin (SYS-LASKU) rajapintaa päivitetään siten, että asiakastunnisteen muoto muuttuu numeerisesta UUID-muotoon. Vanha rajapinta poistetaan käytöstä 1kk siirtymäajalla.",
+    "Skenaario 3: Uuden HR-järjestelmän käyttöönotto":
+        "Olemassa olevaan arkkitehtuuriin tuodaan uusi HR- ja Osaamisenhallinta (SYS-HR), joka liitetään suoraan toiminnanohjaukseen ja keskitettyyn pääsynhallintaan."
 }
 
 # ==============================================================================
@@ -182,23 +184,24 @@ if run_button:
         st.warning("Syötä muutosehdotus tekstikenttään.")
     else:
         status_container = st.empty()
-        status_container.info(f"Tekoäly ({ai_provider}) analysoi MVA-riippuvuuksia ja laskee vaikutuksia...")
+        status_container.info(f"Tekoäly ({ai_provider}) analysoi MVA-riippuvuuksia, omistajia ja strategista linjaa...")
 
         json_mva_str = json.dumps(MVA_DATA, ensure_ascii=False, indent=2)
         system_instruction = (
             "Olet kokenut kokonaisarkkitehti (Enterprise Architect).\n"
             "Tehtäväsi on suorittaa tarkka muutosvaikutusanalyysi annetun Minimum Viable Architecture (MVA) -JSON-datan pohjalta.\n\n"
-            "Arvioi muutosehdotuksen vaikutuksia suoriin ja epäsuoriin riippuvuuksiin.\n"
+            "Ota huomioon järjestelmien omistajat, kriittisyydet, riippuvuudet sekä organisaation strategiset tavoitteet (strategic_objectives).\n"
+            "Arvioi miten ehdotettu muutos vaikuttaa suoriin ja epäsuoriin riippuvuuksiin sekä strategiaan.\n"
             "Muodosta laadukas Graphviz DOT -koodi, joka kuvaa koko järjestelmäkentän ja korostaa muutosalueet väreillä.\n"
             "Palauta vastauksesi tiukasti annetussa JSON-muodossa."
         )
 
         prompt = (
-            f"TÄSSÄ ON ORGANISAATION MVA-ARKKITEHTUURIDATA:\n"
+            f"TÄSSÄ ON ORGANISAATION MVA-ARKKITEHTUURIDATA JA STRATEGIA:\n"
             f"```json\n{json_mva_str}\n```\n\n"
             f"EHDOTETTU ARKKITEHTUURIMUUTOS:\n"
             f"{change_proposal}\n\n"
-            f"Suorita muutosvaikutusanalyysi MVA-datan pohjalta."
+            f"Suorita kattava muutosvaikutusanalyysi MVA-datan pohjalta."
         )
 
         success = False
@@ -333,6 +336,10 @@ if st.session_state.analysis_result is not None:
     else:
         st.success(f"**Yhteenveto:** {res.summary}")
 
+    # Näytetään strateginen linjaus erillisenä nostona
+    with st.expander("Strateginen linjaus ja tavoitteiden arviointi", expanded=True):
+        st.write(res.strategic_alignment)
+
     col_left, col_right = st.columns([1, 1])
 
     with col_left:
@@ -344,10 +351,18 @@ if st.session_state.analysis_result is not None:
             st.code(res.dot_graph)
 
     with col_right:
-        st.subheader("Vaikutukset järjestelmittäin")
+        st.subheader("Vaikutukset järjestelmittäin & Omistajat")
         for sys_imp in res.impacts:
-            with st.expander(f"**{sys_imp.system_name}** ({sys_imp.impact_type} vaikutus) - Riski: {sys_imp.risk_level}"):
+            # Etsitään järjestelmän omistaja JSON-datasta taustatietona
+            owner_name = "Ei määritetty"
+            for s in MVA_DATA["systems"]:
+                if s["id"] == sys_imp.system_id:
+                    owner_name = s.get("owner", "Ei määritetty")
+                    break
+
+            with st.expander(f"**{sys_imp.system_name}** ({sys_imp.impact_type}) - Omistaja: {owner_name} | Riski: {sys_imp.risk_level}"):
                 st.write(f"**Järjestelmä-ID:** `{sys_imp.system_id}`")
+                st.write(f"**Vastuuhenkilö / Omistaja:** {owner_name}")
                 st.write(f"**Riskitaso:** {sys_imp.risk_level}")
                 st.write(f"**Kuvaus:** {sys_imp.description}")
 
