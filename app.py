@@ -90,30 +90,7 @@ class ImpactAnalysisResult(BaseModel):
 # ==============================================================================
 st.sidebar.title("Asetukset")
 
-ai_provider = st.sidebar.selectbox(
-    "Valitse tekoälymalli",
-    ["Google Gemini", "OpenAI ChatGPT", "Groq (Llama 3)"]
-)
-
-if ai_provider == "Google Gemini":
-    if GEMINI_API_KEY:
-        st.sidebar.success("Gemini API-avain aktiivinen")
-    else:
-        st.sidebar.error("Gemini API-avain puuttuu")
-elif ai_provider == "OpenAI ChatGPT":
-    if OPENAI_API_KEY:
-        st.sidebar.success("ChatGPT API-avain aktiivinen")
-    else:
-        st.sidebar.error("ChatGPT API-avain puuttuu")
-else:
-    if GROQ_API_KEY:
-        st.sidebar.success("Groq API-avain aktiivinen")
-    else:
-        st.sidebar.error("Groq API-avain puuttuu")
-
-st.sidebar.markdown("---")
 st.sidebar.subheader("Toimintatila")
-
 app_mode = st.sidebar.radio(
     "Valitse käyttötapa:",
     ["Muutosvaikutusanalyysi", "Kysy arkkitehtuurista (QA)"],
@@ -143,6 +120,31 @@ if app_mode == "Muutosvaikutusanalyysi":
             "Kirjoita oma syöte"
         ]
     )
+
+# Malli- ja API-asetukset alhaalla
+st.sidebar.markdown("---")
+st.sidebar.subheader("Tekoälyasetukset")
+
+ai_provider = st.sidebar.selectbox(
+    "Valitse tekoälymalli",
+    ["Groq (Llama 3)", "Google Gemini", "OpenAI ChatGPT"]
+)
+
+if ai_provider == "Groq (Llama 3)":
+    if GROQ_API_KEY:
+        st.sidebar.success("Groq API-avain aktiivinen")
+    else:
+        st.sidebar.error("Groq API-avain puuttuu")
+elif ai_provider == "Google Gemini":
+    if GEMINI_API_KEY:
+        st.sidebar.success("Gemini API-avain aktiivinen")
+    else:
+        st.sidebar.error("Gemini API-avain puuttuu")
+else:
+    if OPENAI_API_KEY:
+        st.sidebar.success("ChatGPT API-avain aktiivinen")
+    else:
+        st.sidebar.error("ChatGPT API-avain puuttuu")
 
 # ==============================================================================
 # 5. PÄÄNÄKYMÄ
@@ -177,12 +179,12 @@ if "qa_result" not in st.session_state:
 # 6. ANALYYSIN TAI KYSELYN SUORITTAMINEN
 # ==============================================================================
 if run_button:
-    if ai_provider == "Google Gemini" and not GEMINI_API_KEY:
+    if ai_provider == "Groq (Llama 3)" and not GROQ_API_KEY:
+        st.error("GROQ_API_KEY puuttuu!")
+    elif ai_provider == "Google Gemini" and not GEMINI_API_KEY:
         st.error("GEMINI_API_KEY puuttuu!")
     elif ai_provider == "OpenAI ChatGPT" and not OPENAI_API_KEY:
         st.error("OPENAI_API_KEY puuttuu!")
-    elif ai_provider == "Groq (Llama 3)" and not GROQ_API_KEY:
-        st.error("GROQ_API_KEY puuttuu!")
     elif not user_input.strip():
         st.warning("Syötä tekstikenttään muutosehdotus tai kysymys.")
     else:
@@ -224,8 +226,50 @@ if run_button:
 
         success = False
 
+        # --- GROQ ---
+        if ai_provider == "Groq (Llama 3)":
+            if OpenAI is None:
+                status_container.error("OpenAI-kirjastoa ei ole asennettu (Groq käyttää samaa kirjastoa).")
+            else:
+                try:
+                    groq_client = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
+                    
+                    if app_mode == "Muutosvaikutusanalyysi":
+                        schema_json_str = json.dumps(ImpactAnalysisResult.model_json_schema(), ensure_ascii=False, indent=2)
+                        groq_prompt = f"{prompt}\n\nVastaa täsmälleen seuraavan JSON-skeeman mukaan:\n```json\n{schema_json_str}\n```"
+
+                        completion = groq_client.chat.completions.create(
+                            model="llama-3.3-70b-versatile",
+                            messages=[
+                                {"role": "system", "content": system_instruction},
+                                {"role": "user", "content": groq_prompt}
+                            ],
+                            response_format={"type": "json_object"},
+                            temperature=0.2,
+                        )
+                        parsed_data = json.loads(completion.choices[0].message.content)
+                        st.session_state.analysis_result = ImpactAnalysisResult(**parsed_data)
+                    else:
+                        completion = groq_client.chat.completions.create(
+                            model="llama-3.3-70b-versatile",
+                            messages=[
+                                {"role": "system", "content": system_instruction},
+                                {"role": "user", "content": prompt}
+                            ],
+                            temperature=0.2,
+                        )
+                        st.session_state.qa_result = completion.choices[0].message.content
+
+                    st.session_state.used_model = "llama-3.3-70b-versatile (Groq)"
+                    status_container.success("Valmis!")
+                    time.sleep(1)
+                    success = True
+                    st.rerun()
+                except Exception as e:
+                    status_container.error(f"Virhe Groq API-kutsussa: {e}")
+
         # --- GOOGLE GEMINI ---
-        if ai_provider == "Google Gemini":
+        elif ai_provider == "Google Gemini":
             client = genai.Client(api_key=GEMINI_API_KEY)
             model_variants = ["gemini-2.0-flash", "gemini-1.5-flash"]
             
@@ -308,48 +352,6 @@ if run_button:
                     st.rerun()
                 except Exception as e:
                     status_container.error(f"Virhe OpenAI API-kutsussa: {e}")
-
-        # --- GROQ ---
-        elif ai_provider == "Groq (Llama 3)":
-            if OpenAI is None:
-                status_container.error("OpenAI-kirjastoa ei ole asennettu (Groq käyttää samaa).")
-            else:
-                try:
-                    groq_client = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
-                    
-                    if app_mode == "Muutosvaikutusanalyysi":
-                        schema_json_str = json.dumps(ImpactAnalysisResult.model_json_schema(), ensure_ascii=False, indent=2)
-                        groq_prompt = f"{prompt}\n\nVastaa täsmälleen seuraavan JSON-skeeman mukaan:\n```json\n{schema_json_str}\n```"
-
-                        completion = groq_client.chat.completions.create(
-                            model="llama-3.3-70b-versatile",
-                            messages=[
-                                {"role": "system", "content": system_instruction},
-                                {"role": "user", "content": groq_prompt}
-                            ],
-                            response_format={"type": "json_object"},
-                            temperature=0.2,
-                        )
-                        parsed_data = json.loads(completion.choices[0].message.content)
-                        st.session_state.analysis_result = ImpactAnalysisResult(**parsed_data)
-                    else:
-                        completion = groq_client.chat.completions.create(
-                            model="llama-3.3-70b-versatile",
-                            messages=[
-                                {"role": "system", "content": system_instruction},
-                                {"role": "user", "content": prompt}
-                            ],
-                            temperature=0.2,
-                        )
-                        st.session_state.qa_result = completion.choices[0].message.content
-
-                    st.session_state.used_model = "llama-3.3-70b-versatile (Groq)"
-                    status_container.success("Valmis!")
-                    time.sleep(1)
-                    success = True
-                    st.rerun()
-                except Exception as e:
-                    status_container.error(f"Virhe Groq API-kutsussa: {e}")
 
 # ==============================================================================
 # 7. TULOSTEN ESITTÄMINEN
