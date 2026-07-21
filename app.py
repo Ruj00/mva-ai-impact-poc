@@ -23,9 +23,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# Kiinnitetty, varmasti toimiva perusmalli
-ACTIVE_MODEL = "gemini-1.5-flash"
-
 # Luetaan API-avain ensin Streamlit Cloudin Secretsistä, sitten ympäristömuuttujista
 API_KEY = ""
 if "GEMINI_API_KEY" in st.secrets:
@@ -119,7 +116,7 @@ if API_KEY:
 else:
     st.sidebar.error("❌ API-avain puuttuu (Aseta `GEMINI_API_KEY` Streamlit Secretsiin)")
 
-st.sidebar.info(f"🤖 **Malli:** `{ACTIVE_MODEL}`")
+st.sidebar.info("🤖 **API-versio:** `v1` (Stabiili)")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("📋 Testiskenaariot")
@@ -175,7 +172,11 @@ if run_button:
         status_container = st.empty()
         status_container.info("⏳ Tekoäly analysoi MVA-riippuvuuksia ja laskee vaikutuksia...")
 
-        client = genai.Client(api_key=API_KEY)
+        # Pakotetaan SDK käyttämään stabiilia v1-rajapintaa v1betan sijaan
+        client = genai.Client(
+            api_key=API_KEY,
+            http_options={'api_version': 'v1'}
+        )
 
         system_instruction = (
             "Olet kokenut kokonaisarkkitehti (Enterprise Architect).\n"
@@ -195,11 +196,14 @@ if run_button:
             f"Suorita muutosvaikutusanalyysi MVA-datan pohjalta."
         )
 
-        max_attempts = 3
-        for attempt in range(1, max_attempts + 1):
+        # Testataan toimivat mallinimimuodot
+        model_variants = ["gemini-1.5-flash", "models/gemini-1.5-flash", "gemini-2.0-flash"]
+        
+        success = False
+        for model_name in model_variants:
             try:
                 response = client.models.generate_content(
-                    model=ACTIVE_MODEL,
+                    model=model_name,
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         system_instruction=system_instruction,
@@ -210,31 +214,37 @@ if run_button:
                 )
 
                 st.session_state.analysis_result = response.parsed
-                status_container.success("✅ Analyysi valmis!")
+                st.session_state.used_model = model_name
+                status_container.success(f"✅ Analyysi valmis! (Malli: `{model_name}`)")
                 time.sleep(1)
-                st.rerun()  # Pakotetaan sivun päivitys tulosten näyttämiseksi
+                success = True
+                st.rerun()
                 break
 
             except Exception as e:
                 error_str = str(e)
-                # Jos saavutetaan ilmaisraja (429 Too Many Requests / RESOURCE_EXHAUSTED)
-                if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-                    if attempt < max_attempts:
-                        status_container.warning(
-                            f"⏳ API-ilmaisraja saavutettu. Odotetaan 10 sekuntia ennen yritystä {attempt + 1}/{max_attempts}..."
-                        )
-                        time.sleep(10)
-                    else:
-                        status_container.error("❌ API-ilmaiskiintiö ylittyi täysin. Odota noin 1 minuutti ennen kuin painat nappia uudelleen.")
+                if "404" in error_str:
+                    # Kokeillaan seuraavaa nimimuotoa
+                    continue
+                elif "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                    status_container.warning("⏳ API-ilmaisraja saavutettu. Odotetaan 10 sekuntia ennen retrya...")
+                    time.sleep(10)
                 else:
                     status_container.error(f"⚠️ Virhe API-kutsussa: {error_str}")
                     break
+
+        if not success and "analysis_result" not in st.session_state:
+            status_container.error(
+                "❌ Mikään mallivariantti ei vastannut API-avaimellasi. "
+                "Varmista, että Streamlit Secretsissä ei ole ylimääräisiä heittomerkkejä tai välilyöntejä API-avaimessa."
+            )
 
 # ==============================================================================
 # 7. TULOSTEN ESITTÄMINEN
 # ==============================================================================
 if st.session_state.analysis_result is not None:
     res: ImpactAnalysisResult = st.session_state.analysis_result
+    used_model_name = st.session_state.get("used_model", "gemini-1.5-flash")
 
     st.markdown("---")
     st.header("📊 Analyysin tulokset")
@@ -246,7 +256,7 @@ if st.session_state.analysis_result is not None:
 
     col1.metric("Kokonaisriskitaso", f"{risk_icon} {res.overall_risk}")
     col2.metric("Vaikutuksen alaiset järjestelmät", f"{res.affected_systems_count} / {len(MVA_DATA['systems'])} pcs")
-    col3.metric("Käytetty malli", ACTIVE_MODEL)
+    col3.metric("Käytetty malli", used_model_name)
 
     if res.overall_risk == "KORKEA":
         st.error(f"**Yhteenveto:** {res.summary}")
@@ -298,7 +308,7 @@ if st.session_state.analysis_result is not None:
         if submit_eval:
             eval_entry = {
                 "timestamp": datetime.now().isoformat(),
-                "model": ACTIVE_MODEL,
+                "model": used_model_name,
                 "scenario": scenario_choice,
                 "proposal": change_proposal,
                 "ai_overall_risk": res.overall_risk,
