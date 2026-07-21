@@ -305,4 +305,4 @@ if st.session_state.analysis_result is not None:
             with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(evaluations, f, ensure_ascii=False, indent=2)
 
-            st.success("✅ Palaute tallennettu onnistuneesti tiedostoon `evaluations.json`!"
+            st.success("✅ Palaute tallennettu onnistuneesti tiedostoon `evaluations.json`!")
