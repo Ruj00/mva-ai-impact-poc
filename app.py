@@ -4,6 +4,10 @@ import time
 from datetime import datetime
 import streamlit as st
 from pydantic import BaseModel, Field
+from styles import load_custom_css
+
+# Ajetaan tyylit heti sivun konfiguroinnin jälkeen
+load_custom_css()
 
 # Google GenAI SDK
 from google import genai
