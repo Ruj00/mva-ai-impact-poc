@@ -16,27 +16,74 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# 2. MVA ARCHITECTURE DATA LOADER (Ladataan erillisestä JSON-tiedostosta)
+# 2. MVA ARCHITECTURE DATA LOADER (Turvaversio oletusdatalla)
 # ==============================================================================
 @st.cache_data
 def load_mva_data(file_path="mva_architecture.json"):
-    """Lataa MVA-arkkitehtuuridatan JSON-tiedostosta."""
+    """Lataa MVA-arkkitehtuuridatan JSON-tiedostosta tai palauttaa oletuksen."""
     if os.path.exists(file_path):
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
             st.error(f"Virhe arkkitehtuuridatan lukemisessa: {e}")
-            return None
-    else:
-        st.error(f"Arkkitehtuuritiedostoa '{file_path}' ei löytynyt.")
-        return None
+    
+    # Vara-arvo (Fallback), jos tiedostoa ei löydy tai sen lukeminen epäonnistuu
+    st.warning(f"⚠️ Tiedostoa '{file_path}' ei löytynyt. Käytetään sisäistä oletusdataa.")
+    return {
+        "organization": "Asiantuntijayritys Oy (Oletus)",
+        "version": "1.2",
+        "systems": [
+            {
+                "id": "SYS-CRM",
+                "name": "Asiakashallinta (CRM)",
+                "criticality": "KORKEA",
+                "owner": "Myyntitiimi",
+                "description": "Hallinnoi asiakastietoja ja myyntiputkea.",
+                "upstream_dependencies": [],
+                "downstream_dependencies": ["SYS-LASKU", "SYS-MARKETING"]
+            },
+            {
+                "id": "SYS-LASKU",
+                "name": "Laskutusmoottori",
+                "criticality": "KRIITTINEN",
+                "owner": "Taloushallisto",
+                "description": "Laskujen luonti ja maksuvalvonta.",
+                "upstream_dependencies": ["SYS-CRM"],
+                "downstream_dependencies": ["SYS-ERP", "SYS-BI"]
+            },
+            {
+                "id": "SYS-MARKETING",
+                "name": "Markkinointiautomaatio",
+                "criticality": "KOHTALAINEN",
+                "owner": "Markkinointi",
+                "description": "Sähköpostikampanjat ja liidien pisteytys.",
+                "upstream_dependencies": ["SYS-CRM"],
+                "downstream_dependencies": []
+            },
+            {
+                "id": "SYS-ERP",
+                "name": "Toiminnanohjaus (ERP)",
+                "criticality": "KRIITTINEN",
+                "owner": "Operatiivinen johto",
+                "description": "Resursointi ja projektinhallinta.",
+                "upstream_dependencies": ["SYS-LASKU"],
+                "downstream_dependencies": ["SYS-BI"]
+            },
+            {
+                "id": "SYS-BI",
+                "name": "Raportointi & BI",
+                "criticality": "MATALA",
+                "owner": "Johtoryhmä",
+                "description": "Liiketoiminta-analytiikka ja johdon raportit.",
+                "upstream_dependencies": ["SYS-LASKU", "SYS-ERP"],
+                "downstream_dependencies": []
+            }
+        ]
+    }
 
-# Ladataan kokonainen data kerralla muistiin
+# Ladataan data muistiin
 MVA_DATA = load_mva_data()
-
-if MVA_DATA is None:
-    st.stop()
 
 # ==============================================================================
 # 3. PYDANTIC-MALLIT STRUCTURED OUTPUTIA VARTEN
