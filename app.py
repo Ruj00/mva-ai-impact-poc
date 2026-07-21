@@ -15,13 +15,80 @@ except ImportError:
     pass
 
 # ==============================================================================
-# 1. SOVELLUKSEN JA SIVUN ASETUKSET & API-AVAIN
+# 1. SOVELLUKSEN JA SIVUN ASETUKSET & MUKAUTETTU TEEMA (CSS)
 # ==============================================================================
 st.set_page_config(
-    page_title="MVA AI Impact Analyzer",
-    page_icon="🏗️",
+    page_title="MVA AI Muutosvaikutusanalyysi",
     layout="wide"
 )
+
+# Rauhoittava, ammattimainen värimaailma CSS:llä
+def inject_custom_theme():
+    st.markdown("""
+        <style>
+        /* Päätausta ja tekstivärit */
+        .stApp {
+            background-color: #f8fafc;
+            color: #1e293b;
+        }
+        
+        /* Sivupalkin tyyli */
+        [data-testid="stSidebar"] {
+            background-color: #f1f5f9;
+            border-right: 1px solid #e2e8f0;
+        }
+
+        /* Otsikot */
+        h1, h2, h3, h4 {
+            color: #0f172a !important;
+            font-weight: 600 !important;
+        }
+
+        /* Ensi-sijainen painike (Primary button) */
+        div.stButton > button[kind="primary"] {
+            background-color: #2563eb !important;
+            color: #ffffff !important;
+            border-radius: 6px !important;
+            border: none !important;
+            font-weight: 500 !important;
+            transition: all 0.2s ease;
+        }
+        div.stButton > button[kind="primary"]:hover {
+            background-color: #1d4ed8 !important;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Tekstikentät ja alasvetovalikot */
+        div[data-baseweb="textarea"] > div, div[data-baseweb="select"] > div {
+            border-radius: 6px !important;
+            border-color: #cbd5e1 !important;
+            background-color: #ffffff !important;
+        }
+
+        /* Expander-osiot */
+        .streamlit-expanderHeader {
+            background-color: #ffffff !important;
+            border-radius: 6px !important;
+            border: 1px solid #e2e8f0 !important;
+            color: #334155 !important;
+        }
+
+        /* Metric-korttien ulkoasu */
+        [data-testid="stMetricValue"] {
+            color: #0f172a !important;
+            font-weight: 600 !important;
+        }
+        [data-testid="stMetric"] {
+            background-color: #ffffff;
+            padding: 12px 16px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+inject_custom_theme()
 
 # Luetaan API-avain ensin Streamlit Cloudin Secretsistä, sitten ympäristömuuttujista
 API_KEY = ""
@@ -102,24 +169,24 @@ class ImpactAnalysisResult(BaseModel):
     impacts: list[SystemImpact] = Field(description="Lista kaikista järjestelmistä joihin muutos vaikuttaa")
     recommendations: list[str] = Field(description="3-5 konkreettista jatkotoimenpidesuositusta")
     dot_graph: str = Field(
-        description="Validia Graphviz DOT-koodia riippuvuuskartan visualisointiin. Värjää suoran vaikutuksen solmut punaisella (fillcolor='#ffcccc'), epäsuorat keltaisella (fillcolor='#fff2cc') ja koskemattomat vihreällä (fillcolor='#e2efda'). Käytä rankdir=LR."
+        description="Validia Graphviz DOT-koodia riippuvuuskartan visualisointiin. Värjää suoran vaikutuksen solmut pehmeän punaisella (fillcolor='#fecdd3'), epäsuorat pehmeän keltaisella (fillcolor='#fef08a') ja koskemattomat maltillisen harmaalla/vihreällä (fillcolor='#e2e8f0'). Käytä rankdir=LR."
     )
 
 # ==============================================================================
 # 4. SIVUPALKKI (SIDEBAR) - TILA & SKENAARIOT
 # ==============================================================================
-st.sidebar.title("⚙️ PoC-Asetukset")
+st.sidebar.title("Asetukset")
 
 # Tilan ilmaisin API-avaimelle
 if API_KEY:
-    st.sidebar.success("🔑 Gemini API-avain aktiivinen")
+    st.sidebar.success("API-avain aktiivinen")
 else:
-    st.sidebar.error("❌ API-avain puuttuu (Aseta `GEMINI_API_KEY` Streamlit Secretsiin)")
+    st.sidebar.error("API-avain puuttuu (Aseta `GEMINI_API_KEY` Streamlit Secretsiin)")
 
-st.sidebar.info("🤖 **API-versio:** `v1` (Stabiili)")
+st.sidebar.info("API-versio: `v1` (Stabiili)")
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("📋 Testiskenaariot")
+st.sidebar.subheader("Testiskenaariot")
 
 scenario_choice = st.sidebar.selectbox(
     "Lataa valmis skenaario",
@@ -135,13 +202,13 @@ scenario_texts = {
     "Skenaario 1: CRM-järjestelmän vaihto SaaS-malliin": 
         "Nykyinen Asiakashallinta (SYS-CRM) korvataan uudella pilvipohjaisella SaaS-järjestelmällä. Vanha SQL-suorarajapinta poistuu ja jatkossa tiedot siirretään REST API:n kautta erillisessä yöajossa.",
     "Skenaario 2: Laskutusmoottorin rajapintamuutos": 
-        "Laskutusmoottorin (SYS-LASKU) rajapintaa päivitetään siten, että asiakastunnisteen muoto muuttuu numeerisesta UUID-muotoon. Vanha rajapinta poistetaan käytöstä 1kk siirtymäajalla."
+        "Laskutusmoottorin (SYS-LASKU) rajapintaa päivitetään siten, että asiakastunnisteen muuto muuttuu numeerisesta UUID-muotoon. Vanha rajapinta poistetaan käytöstä 1kk siirtymäajalla."
 }
 
 # ==============================================================================
 # 5. PÄÄNÄKYMÄ (MAIN AREA)
 # ==============================================================================
-st.title("🏗️ MVA AI Muutosvaikutusanalyysi (PoC)")
+st.title("MVA AI Muutosvaikutusanalyysi (PoC)")
 st.caption("Tekoälyavusteinen arkkitehtuurianalyysi kehysriippumattoman MVA-mallin pohjalta | YAMK Opinnäytetyö")
 
 default_text = ""
@@ -155,7 +222,7 @@ change_proposal = st.text_area(
     placeholder="Kuvaile muutos, esim. 'Järjestelmä X korvataan uudella rajapinnalla...'"
 )
 
-run_button = st.button("🚀 Aja muutosvaikutusanalyysi", type="primary", use_container_width=True)
+run_button = st.button("Aja muutosvaikutusanalyysi", type="primary", use_container_width=True)
 
 if "analysis_result" not in st.session_state:
     st.session_state.analysis_result = None
@@ -165,14 +232,14 @@ if "analysis_result" not in st.session_state:
 # ==============================================================================
 if run_button:
     if not API_KEY:
-        st.error("❌ GEMINI_API_KEY puuttuu! Lisää se Streamlit Cloudin Secrets-asetuksiin muodossa:\n`GEMINI_API_KEY = \"oma_api_avaimesi\"`")
+        st.error("GEMINI_API_KEY puuttuu! Lisää se Streamlit Cloudin Secrets-asetuksiin muodossa:\n`GEMINI_API_KEY = \"oma_api_avaimesi\"`")
     elif not change_proposal.strip():
-        st.warning("⚠️ Syötä muutosehdotus tekstikenttään.")
+        st.warning("Syötä muutosehdotus tekstikenttään.")
     else:
         status_container = st.empty()
-        status_container.info("⏳ Tekoäly analysoi MVA-riippuvuuksia ja laskee vaikutuksia...")
+        status_container.info("Tekoäly analysoi MVA-riippuvuuksia ja laskee vaikutuksia...")
 
-        # Pakotetaan SDK käyttämään stabiilia v1-rajapintaa v1betan sijaan
+        # Pakotetaan SDK käyttämään stabiilia v1-rajapintaa
         client = genai.Client(
             api_key=API_KEY,
             http_options={'api_version': 'v1'}
@@ -215,7 +282,7 @@ if run_button:
 
                 st.session_state.analysis_result = response.parsed
                 st.session_state.used_model = model_name
-                status_container.success(f"✅ Analyysi valmis! (Malli: `{model_name}`)")
+                status_container.success(f"Analyysi valmis! (Malli: `{model_name}`)")
                 time.sleep(1)
                 success = True
                 st.rerun()
@@ -224,18 +291,17 @@ if run_button:
             except Exception as e:
                 error_str = str(e)
                 if "404" in error_str:
-                    # Kokeillaan seuraavaa nimimuotoa
                     continue
                 elif "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-                    status_container.warning("⏳ API-ilmaisraja saavutettu. Odotetaan 10 sekuntia ennen retrya...")
+                    status_container.warning("API-ilmaisraja saavutettu. Odotetaan 10 sekuntia ennen retrya...")
                     time.sleep(10)
                 else:
-                    status_container.error(f"⚠️ Virhe API-kutsussa: {error_str}")
+                    status_container.error(f"Virhe API-kutsussa: {error_str}")
                     break
 
         if not success and "analysis_result" not in st.session_state:
             status_container.error(
-                "❌ Mikään mallivariantti ei vastannut API-avaimellasi. "
+                "Mikään mallivariantti ei vastannut API-avaimellasi. "
                 "Varmista, että Streamlit Secretsissä ei ole ylimääräisiä heittomerkkejä tai välilyöntejä API-avaimessa."
             )
 
@@ -247,15 +313,12 @@ if st.session_state.analysis_result is not None:
     used_model_name = st.session_state.get("used_model", "gemini-1.5-flash")
 
     st.markdown("---")
-    st.header("📊 Analyysin tulokset")
+    st.header("Analyysin tulokset")
 
     col1, col2, col3 = st.columns(3)
 
-    risk_colors = {"KORKEA": "🔴", "KOHTALAINEN": "🟡", "MATALA": "🟢"}
-    risk_icon = risk_colors.get(res.overall_risk, "⚪")
-
-    col1.metric("Kokonaisriskitaso", f"{risk_icon} {res.overall_risk}")
-    col2.metric("Vaikutuksen alaiset järjestelmät", f"{res.affected_systems_count} / {len(MVA_DATA['systems'])} pcs")
+    col1.metric("Kokonaisriskitaso", res.overall_risk)
+    col2.metric("Vaikutuksen alaiset järjestelmät", f"{res.affected_systems_count} / {len(MVA_DATA['systems'])} kpl")
     col3.metric("Käytetty malli", used_model_name)
 
     if res.overall_risk == "KORKEA":
@@ -268,7 +331,7 @@ if st.session_state.analysis_result is not None:
     col_left, col_right = st.columns([1, 1])
 
     with col_left:
-        st.subheader("🕸️ Vaikutuskartta (Riippuvuudet)")
+        st.subheader("Vaikutuskartta (Riippuvuudet)")
         try:
             st.graphviz_chart(res.dot_graph, use_container_width=True)
         except Exception:
@@ -276,15 +339,14 @@ if st.session_state.analysis_result is not None:
             st.code(res.dot_graph)
 
     with col_right:
-        st.subheader("📋 Vaikutukset järjestelmittäin")
+        st.subheader("Vaikutukset järjestelmittäin")
         for sys_imp in res.impacts:
-            badge = "🔴" if sys_imp.risk_level == "Punainen" else ("🟡" if sys_imp.risk_level == "Keltainen" else "🟢")
-            with st.expander(f"{badge} **{sys_imp.system_name}** ({sys_imp.impact_type} vaikutus)"):
+            with st.expander(f"**{sys_imp.system_name}** ({sys_imp.impact_type} vaikutus) - Riski: {sys_imp.risk_level}"):
                 st.write(f"**Järjestelmä-ID:** `{sys_imp.system_id}`")
                 st.write(f"**Riskitaso:** {sys_imp.risk_level}")
                 st.write(f"**Kuvaus:** {sys_imp.description}")
 
-    st.subheader("💡 Suositellut toimenpiteet")
+    st.subheader("Suositellut toimenpiteet")
     for rec in res.recommendations:
         st.markdown(f"- {rec}")
 
@@ -292,7 +354,7 @@ if st.session_state.analysis_result is not None:
     # 8. EVALUOINTIOSIO (LUKU 6 DATA)
     # ==========================================================================
     st.markdown("---")
-    st.subheader("🧪 Asiantuntijan evaluointi (Opinnäytetyön aineistonkeruu)")
+    st.subheader("Asiantuntijan evaluointi (Opinnäytetyön aineistonkeruu)")
     st.caption("Arvioi tekoälyn tekemän muutosvaikutusanalyysin laatua ja luotettavuutta. Tiedot tallentuvat tutkimusaineistoksi.")
 
     with st.form("eval_form"):
@@ -303,7 +365,7 @@ if st.session_state.analysis_result is not None:
         )
         eval_comments = st.text_area("Asiantuntijan kommentit, havaitut puutteet tai hallusinaatiot:")
         
-        submit_eval = st.form_submit_button("💾 Tallenna evaluointipalaute")
+        submit_eval = st.form_submit_button("Tallenna evaluointipalaute")
 
         if submit_eval:
             eval_entry = {
@@ -330,4 +392,4 @@ if st.session_state.analysis_result is not None:
             with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(evaluations, f, ensure_ascii=False, indent=2)
 
-            st.success("✅ Palaute tallennettu onnistuneesti tiedostoon `evaluations.json`!")
+            st.success("Palaute tallennettu onnistuneesti tiedostoon `evaluations.json`!")
