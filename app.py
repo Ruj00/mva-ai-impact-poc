@@ -50,11 +50,14 @@ else:
     GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
 # ==============================================================================
-# 2. MVA ARCHITECTURE DATA LOADER (Ladataan erillisestä JSON-tiedostosta)
+# 2. MVA ARCHITECTURE DATA LOADER (Hakee aina skriptin omasta kansiosta)
 # ==============================================================================
 @st.cache_data
-def load_mva_data(file_path="mva_architecture.json"):
-    """Lataa MVA-arkkitehtuuridatan JSON-tiedostosta."""
+def load_mva_data(file_name="mva_architecture.json"):
+    """Lataa MVA-arkkitehtuuridatan luotettavasti suoraan skriptin omasta kansiosta."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.join(script_dir, file_name)
+    
     if os.path.exists(file_path):
         try:
             with open(file_path, "r", encoding="utf-8") as f:
@@ -63,10 +66,10 @@ def load_mva_data(file_path="mva_architecture.json"):
             st.error(f"Virhe arkkitehtuuridatan lukemisessa: {e}")
             return None
     else:
-        st.error(f"Arkkitehtuuritiedostoa '{file_path}' ei löytynyt.")
+        st.error(f"Arkkitehtuuritiedostoa ei löytynyt polusta: {file_path}")
         return None
 
-# Ladataan kokonainen data kerralla muistiin
+# Ladataan data muistiin
 MVA_DATA = load_mva_data()
 
 if MVA_DATA is None:
