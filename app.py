@@ -23,15 +23,15 @@ st.set_page_config(
     layout="wide"
 )
 
-# Kiinnitetty, varmasti toimiva standardimalli
-ACTIVE_MODEL = "gemini-1.5-flash"
-
 # Luetaan API-avain ensin Streamlit Cloudin Secretsistä, sitten ympäristömuuttujista
 API_KEY = ""
 if "GEMINI_API_KEY" in st.secrets:
     API_KEY = st.secrets["GEMINI_API_KEY"]
 else:
     API_KEY = os.environ.get("GEMINI_API_KEY", "")
+
+# Käytetään virallista versionimikettä gemini-2.0-flash tai gemini-1.5-flash-002
+ACTIVE_MODEL = "gemini-2.0-flash"
 
 # ==============================================================================
 # 2. MVA ARCHITECTURE DUMMY DATA (Kovakoodattu MVA-malli)
@@ -178,7 +178,7 @@ if run_button:
             system_instruction = (
                 "Olet kokenut kokonaisarkkitehti (Enterprise Architect).\n"
                 "Tehtäväsi on suorittaa tarkka muutosvaikutusanalyysi annetun Minimum Viable Architecture (MVA) -JSON-datan pohjalta.\n\n"
-                "Arvioi muutosehdotuksen vaikutuksia suoriin ja epäsuoriin riippuvuuksiin.\n"
+                "Arvioi muutosehdotuksen vaikutuksia suoriin ja epäsuoriin riippuvuuvuuksiin.\n"
                 "Muodosta laadukas Graphviz DOT -koodi, joka kuvaa koko järjestelmäkentän ja korostaa muutosalueet väreillä.\n"
                 "Palauta vastauksesi tiukasti annetussa JSON-muodossa."
             )
@@ -193,12 +193,14 @@ if run_button:
                 f"Suorita muutosvaikutusanalyysi MVA-datan pohjalta."
             )
 
-            # Sisällytetään automaattinen uudelleenyritys (retry) 429 Rate Limit -tilanteiden varalta
-            max_retries = 2
-            for attempt in range(max_retries):
+            # Vaihtoehtoiset mallinimet, jos ensisijainen palauttaa 404
+            candidate_models = ["gemini-2.0-flash", "gemini-1.5-flash-002", "gemini-1.5-pro-002"]
+            success = False
+
+            for model_name in candidate_models:
                 try:
                     response = client.models.generate_content(
-                        model=ACTIVE_MODEL,
+                        model=model_name,
                         contents=prompt,
                         config=types.GenerateContentConfig(
                             system_instruction=system_instruction,
@@ -209,17 +211,24 @@ if run_button:
                     )
 
                     st.session_state.analysis_result = response.parsed
-                    st.success("Analyysi valmis!")
+                    st.success(f"Analyysi valmis! (Käytetty malli: `{model_name}`)")
+                    success = True
                     break
 
                 except Exception as e:
                     error_str = str(e)
-                    if "429" in error_str and attempt < max_retries - 1:
-                        st.info("⏳ Ilmaiskiintiön viiveraja saavutettu. Odotetaan 8 sekuntia ja yritetään uudelleen...")
-                        time.sleep(8)
+                    # Jos mallia ei löydy, kokeillaan seuraavaa candidaattia
+                    if "404" in error_str:
+                        continue
+                    elif "429" in error_str:
+                        st.info("⏳ Viiveraja saavutettu. Odotetaan 5 sekuntia...")
+                        time.sleep(5)
                     else:
                         st.error(f"Virhe API-kutsussa: {error_str}")
                         break
+
+            if not success and "analysis_result" not in st.session_state:
+                st.error("❌ Mikään valituista malleista ei vastannut API-avaimellasi. Tarkista, että API-avain on luotu Google AI Studiossa (https://aistudio.google.com/).")
 
 # ==============================================================================
 # 7. TULOSTEN ESITTÄMINEN
@@ -237,7 +246,7 @@ if st.session_state.analysis_result is not None:
 
     col1.metric("Kokonaisriskitaso", f"{risk_icon} {res.overall_risk}")
     col2.metric("Vaikutuksen alaiset järjestelmät", f"{res.affected_systems_count} / {len(MVA_DATA['systems'])} pcs")
-    col3.metric("Käytetty malli", ACTIVE_MODEL)
+    col3.metric("Tila", "Analysoitu")
 
     if res.overall_risk == "KORKEA":
         st.error(f"**Yhteenveto:** {res.summary}")
