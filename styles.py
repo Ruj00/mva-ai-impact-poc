@@ -4,21 +4,19 @@ import streamlit as st
 def load_custom_css():
     st.markdown("""
         <style>
-            /* Piilotetaan Streamlitin brändäykset ja yläpalkki */
+            /* Piilotetaan Streamlitin valikot ja alaviite */
             #MainMenu {visibility: hidden;}
             footer {visibility: hidden;}
-            header {visibility: hidden;}
 
-            /* Pakotetaan pelkkä sivupalkin avauspainike näkyviin piilotetusta yläpalkista huolimatta */
-            [data-testid="collapsedControl"] {
-                display: block !important;
-                visibility: visible !important;
-                opacity: 1 !important;
-                z-index: 999999;
-                position: fixed;
-                top: 10px;
-                left: 10px;
-                color: #94a3b8;
+            /* Muokataan yläpalkkia: tehdään siitä läpinäkyvä, jotta se ei häiritse ulkoasua, 
+               mutta pidetään se toiminnallisena, jotta sivupalkin avausnuoli pysyy varmasti tallessa. */
+            header[data-testid="stHeader"] {
+                background-color: transparent !important;
+            }
+
+            /* Piilotetaan turhat elementit yläpalkista (esim. Deploy-nappi) */
+            .stAppHeader > div:last-child {
+                display: none;
             }
 
             /* Mukautettu tyyli sivupalkille */
