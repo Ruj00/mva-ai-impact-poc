@@ -31,7 +31,7 @@ except ImportError:
 # 1. SOVELLUKSEN JA SIVUN ASETUKSET
 # ==============================================================================
 st.set_page_config(
-    page_title="MVA AI Muutosvaikutusanalyysi",
+    page_title="MVA AI Muutosvaikutusanalyysi & QA",
     layout="wide"
 )
 
@@ -65,7 +65,7 @@ if MVA_DATA is None:
     st.stop()
 
 # ==============================================================================
-# 3. PYDANTIC-MALLIT STRUCTURED OUTPUTIA VARTEN
+# 3. PYDANTIC-MALLIT STRUCTURED OUTPUTIA VARTEN (VAIN ANALYYSITILAAN)
 # ==============================================================================
 class SystemImpact(BaseModel):
     system_id: str = Field(description="Järjestelmän tunniste, esim. SYS-CRM")
@@ -112,19 +112,15 @@ else:
         st.sidebar.error("Groq API-avain puuttuu")
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("Testiskenaariot")
+st.sidebar.subheader("Toimintatila")
 
-scenario_choice = st.sidebar.selectbox(
-    "Lataa valmis skenaario",
-    [
-        "Valitse skenaario...",
-        "Skenaario 1: CRM-järjestelmän vaihto SaaS-malliin",
-        "Skenaario 2: Laskutusmoottorin rajapintamuutos",
-        "Skenaario 3: Uuden HR-järjestelmän käyttöönotto",
-        "Kirjoita oma syöte"
-    ]
+app_mode = st.sidebar.radio(
+    "Valitse käyttötapa:",
+    ["Muutosvaikutusanalyysi", "Kysy arkkitehtuurista (QA)"],
+    help="Muutosvaikutusanalyysi analysoi järjestelmämuutosten riskejä ja riippuvuuksia. Kysy arkkitehtuurista -tilassa voit esittää vapaamuotoisia kysymyksiä nykyisestä MVA-datasta."
 )
 
+scenario_choice = "Kirjoita oma syöte"
 scenario_texts = {
     "Skenaario 1: CRM-järjestelmän vaihto SaaS-malliin": 
         "Nykyinen Asiakashallinta (SYS-CRM) korvataan uudella pilvipohjaisella SaaS-järjestelmällä. Vanha SQL-suorarajapinta poistuu ja jatkossa tiedot siirretään REST API:n kautta erillisessä yöajossa.",
@@ -134,28 +130,51 @@ scenario_texts = {
         "Olemassa olevaan arkkitehtuuriin tuodaan uusi HR- ja Osaamisenhallinta (SYS-HR), joka liitetään suoraan toiminnanohjaukseen ja keskitettyyn pääsynhallintaan."
 }
 
+if app_mode == "Muutosvaikutusanalyysi":
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Testiskenaariot")
+    scenario_choice = st.sidebar.selectbox(
+        "Lataa valmis skenaario",
+        [
+            "Valitse skenaario...",
+            "Skenaario 1: CRM-järjestelmän vaihto SaaS-malliin",
+            "Skenaario 2: Laskutusmoottorin rajapintamuutos",
+            "Skenaario 3: Uuden HR-järjestelmän käyttöönotto",
+            "Kirjoita oma syöte"
+        ]
+    )
+
 # ==============================================================================
 # 5. PÄÄNÄKYMÄ
 # ==============================================================================
-st.title("MVA AI Muutosvaikutusanalyysi (PoC)")
-st.caption("Tekoälyavusteinen arkkitehtuurianalyysi kehysriippumattoman MVA-mallin pohjalta | YAMK Opinnäytetyö")
+st.title("MVA AI Arkkitehtuuri-assistentti (PoC)")
+st.caption("Tekoälyavusteinen arkkitehtuurianalyysi ja kyselykehys MVA-mallin pohjalta | YAMK Opinnäytetyö")
 
-default_text = scenario_texts.get(scenario_choice, "")
+if app_mode == "Muutosvaikutusanalyysi":
+    default_text = scenario_texts.get(scenario_choice, "")
+    user_input = st.text_area(
+        "Syötä ehdotettu arkkitehtuurimuutos tai järjestelmävaihto:",
+        value=default_text,
+        height=120,
+        placeholder="Kuvaile muutos..."
+    )
+    run_button = st.button("Aja muutosvaikutusanalyysi", type="primary", use_container_width=True)
+else:
+    user_input = st.text_area(
+        "Kysy mitä tahansa organisaation kokonaisarkkitehtuurista:",
+        height=100,
+        placeholder="Esim. Mitkä järjestelmät tukeutuvat CRM:ään ja kuka omistaa taloushallinnon ratkaisut?"
+    )
+    run_button = st.button("Lähetä kysymys", type="primary", use_container_width=True)
 
-change_proposal = st.text_area(
-    "Syötä ehdotettu arkkitehtuurimuutos tai järjestelmävaihto:",
-    value=default_text,
-    height=120,
-    placeholder="Kuvaile muutos..."
-)
-
-run_button = st.button("Aja muutosvaikutusanalyysi", type="primary", use_container_width=True)
-
+# Alustetaan session state -muuttujat
 if "analysis_result" not in st.session_state:
     st.session_state.analysis_result = None
+if "qa_result" not in st.session_state:
+    st.session_state.qa_result = None
 
 # ==============================================================================
-# 6. ANALYYSIN SUORITTAMINEN
+# 6. ANALYYSIN TAI KYSELYN SUORITTAMINEN
 # ==============================================================================
 if run_button:
     if ai_provider == "Google Gemini" and not GEMINI_API_KEY:
@@ -164,26 +183,44 @@ if run_button:
         st.error("OPENAI_API_KEY puuttuu!")
     elif ai_provider == "Groq (Llama 3)" and not GROQ_API_KEY:
         st.error("GROQ_API_KEY puuttuu!")
-    elif not change_proposal.strip():
-        st.warning("Syötä muutosehdotus tekstikenttään.")
+    elif not user_input.strip():
+        st.warning("Syötä tekstikenttään muutosehdotus tai kysymys.")
     else:
         status_container = st.empty()
-        status_container.info(f"Tekoäly ({ai_provider}) analysoi MVA-riippuvuuksia...")
-
         json_mva_str = json.dumps(MVA_DATA, ensure_ascii=False, indent=2)
-        system_instruction = (
-            "Olet kokenut kokonaisarkkitehti (Enterprise Architect).\n"
-            "Tehtäväsi on suorittaa tarkka muutosvaikutusanalyysi annetun Minimum Viable Architecture (MVA) -JSON-datan pohjalta.\n"
-            "Palauta vastauksesi tiukasti annetussa JSON-muodossa."
-        )
 
-        prompt = (
-            f"TÄSSÄ ON ORGANISAATION MVA-ARKKITEHTUURIDATA JA STRATEGIA:\n"
-            f"```json\n{json_mva_str}\n```\n\n"
-            f"EHDOTETTU ARKKITEHTUURIMUUTOS:\n"
-            f"{change_proposal}\n\n"
-            f"Suorita kattava muutosvaikutusanalyysi MVA-datan pohjalta."
-        )
+        # Tyhjennetään aiemmat tulokset ajon alussa
+        st.session_state.analysis_result = None
+        st.session_state.qa_result = None
+
+        if app_mode == "Muutosvaikutusanalyysi":
+            status_container.info(f"Tekoäly ({ai_provider}) analysoi MVA-riippuvuuksia...")
+            system_instruction = (
+                "Olet kokenut kokonaisarkkitehti (Enterprise Architect).\n"
+                "Tehtäväsi on suorittaa tarkka muutosvaikutusanalyysi annetun Minimum Viable Architecture (MVA) -JSON-datan pohjalta.\n"
+                "Palauta vastauksesi tiukasti annetussa JSON-muodossa."
+            )
+            prompt = (
+                f"TÄSSÄ ON ORGANISAATION MVA-ARKKITEHTUURIDATA JA STRATEGIA:\n"
+                f"```json\n{json_mva_str}\n```\n\n"
+                f"EHDOTETTU ARKKITEHTUURIMUUTOS:\n"
+                f"{user_input}\n\n"
+                f"Suorita kattava muutosvaikutusanalyysi MVA-datan pohjalta."
+            )
+        else:
+            status_container.info(f"Tekoäly ({ai_provider}) hakee vastausta arkkitehtuuridatasta...")
+            system_instruction = (
+                "Olet kokenut ja asiantunteva kokonaisarkkitehti (Enterprise Architect).\n"
+                "Vastaa käyttäjän esittämään kysymykseen nojautuen AINOASTAAN annettuun MVA-arkkitehtuuridataan.\n"
+                "Esitä vastaus selkeästi, ammattimaisesti ja jäsennellysti (käytä tarvittaessa taulukoita, ranskalaisia viivoja tai lihavointeja).\n"
+                "Jos kysyttyä tietoa ei löydy annetusta datasta, ilmoita siitä selkeästi äläkä keksi tietoja."
+            )
+            prompt = (
+                f"ORGANISAATION MVA-ARKKITEHTUURIDATA JA STRATEGIA:\n"
+                f"```json\n{json_mva_str}\n```\n\n"
+                f"KÄYTTÄJÄN KYSYMYS:\n"
+                f"{user_input}"
+            )
 
         success = False
 
@@ -194,19 +231,32 @@ if run_button:
             
             for model_name in model_variants:
                 try:
-                    response = client.models.generate_content(
-                        model=model_name,
-                        contents=prompt,
-                        config=types.GenerateContentConfig(
+                    if app_mode == "Muutosvaikutusanalyysi":
+                        config = types.GenerateContentConfig(
                             system_instruction=system_instruction,
                             response_mime_type="application/json",
                             response_schema=ImpactAnalysisResult,
                             temperature=0.2,
-                        ),
+                        )
+                    else:
+                        config = types.GenerateContentConfig(
+                            system_instruction=system_instruction,
+                            temperature=0.2,
+                        )
+
+                    response = client.models.generate_content(
+                        model=model_name,
+                        contents=prompt,
+                        config=config,
                     )
-                    st.session_state.analysis_result = response.parsed
+                    
+                    if app_mode == "Muutosvaikutusanalyysi":
+                        st.session_state.analysis_result = response.parsed
+                    else:
+                        st.session_state.qa_result = response.text
+
                     st.session_state.used_model = model_name
-                    status_container.success(f"Analyysi valmis! (Malli: `{model_name}`)")
+                    status_container.success(f"Valmis! (Malli: `{model_name}`)")
                     time.sleep(1)
                     success = True
                     st.rerun()
@@ -228,18 +278,31 @@ if run_button:
             else:
                 try:
                     openai_client = OpenAI(api_key=OPENAI_API_KEY)
-                    completion = openai_client.beta.chat.completions.parse(
-                        model="gpt-4o",
-                        messages=[
-                            {"role": "system", "content": system_instruction},
-                            {"role": "user", "content": prompt}
-                        ],
-                        response_format=ImpactAnalysisResult,
-                        temperature=0.2,
-                    )
-                    st.session_state.analysis_result = completion.choices[0].message.parsed
+                    
+                    if app_mode == "Muutosvaikutusanalyysi":
+                        completion = openai_client.beta.chat.completions.parse(
+                            model="gpt-4o",
+                            messages=[
+                                {"role": "system", "content": system_instruction},
+                                {"role": "user", "content": prompt}
+                            ],
+                            response_format=ImpactAnalysisResult,
+                            temperature=0.2,
+                        )
+                        st.session_state.analysis_result = completion.choices[0].message.parsed
+                    else:
+                        completion = openai_client.chat.completions.create(
+                            model="gpt-4o",
+                            messages=[
+                                {"role": "system", "content": system_instruction},
+                                {"role": "user", "content": prompt}
+                            ],
+                            temperature=0.2,
+                        )
+                        st.session_state.qa_result = completion.choices[0].message.content
+
                     st.session_state.used_model = "gpt-4o"
-                    status_container.success("Analyysi valmis! (Malli: `gpt-4o`)")
+                    status_container.success("Valmis! (Malli: `gpt-4o`)")
                     time.sleep(1)
                     success = True
                     st.rerun()
@@ -253,22 +316,35 @@ if run_button:
             else:
                 try:
                     groq_client = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
-                    schema_json_str = json.dumps(ImpactAnalysisResult.model_json_schema(), ensure_ascii=False, indent=2)
-                    groq_prompt = f"{prompt}\n\nVastaa täsmälleen seuraavan JSON-skeeman mukaan:\n```json\n{schema_json_str}\n```"
+                    
+                    if app_mode == "Muutosvaikutusanalyysi":
+                        schema_json_str = json.dumps(ImpactAnalysisResult.model_json_schema(), ensure_ascii=False, indent=2)
+                        groq_prompt = f"{prompt}\n\nVastaa täsmälleen seuraavan JSON-skeeman mukaan:\n```json\n{schema_json_str}\n```"
 
-                    completion = groq_client.chat.completions.create(
-                        model="llama-3.3-70b-versatile",
-                        messages=[
-                            {"role": "system", "content": system_instruction},
-                            {"role": "user", "content": groq_prompt}
-                        ],
-                        response_format={"type": "json_object"},
-                        temperature=0.2,
-                    )
-                    parsed_data = json.loads(completion.choices[0].message.content)
-                    st.session_state.analysis_result = ImpactAnalysisResult(**parsed_data)
+                        completion = groq_client.chat.completions.create(
+                            model="llama-3.3-70b-versatile",
+                            messages=[
+                                {"role": "system", "content": system_instruction},
+                                {"role": "user", "content": groq_prompt}
+                            ],
+                            response_format={"type": "json_object"},
+                            temperature=0.2,
+                        )
+                        parsed_data = json.loads(completion.choices[0].message.content)
+                        st.session_state.analysis_result = ImpactAnalysisResult(**parsed_data)
+                    else:
+                        completion = groq_client.chat.completions.create(
+                            model="llama-3.3-70b-versatile",
+                            messages=[
+                                {"role": "system", "content": system_instruction},
+                                {"role": "user", "content": prompt}
+                            ],
+                            temperature=0.2,
+                        )
+                        st.session_state.qa_result = completion.choices[0].message.content
+
                     st.session_state.used_model = "llama-3.3-70b-versatile (Groq)"
-                    status_container.success("Analyysi valmis!")
+                    status_container.success("Valmis!")
                     time.sleep(1)
                     success = True
                     st.rerun()
@@ -278,7 +354,17 @@ if run_button:
 # ==============================================================================
 # 7. TULOSTEN ESITTÄMINEN
 # ==============================================================================
-if st.session_state.analysis_result is not None:
+
+# A) YLEISEN KYSYMYKSEN (QA) TULOKSET
+if app_mode == "Kysy arkkitehtuurista (QA)" and st.session_state.qa_result:
+    used_model_name = st.session_state.get("used_model", "tuntematon-malli")
+    st.markdown("---")
+    st.header("Vastaus kysymykseen")
+    st.caption(f"Vastauksen tuottanut malli: `{used_model_name}`")
+    st.markdown(st.session_state.qa_result)
+
+# B) MUUTOSVAIKUTUSANALYYSI-TILAN TULOKSET
+elif app_mode == "Muutosvaikutusanalyysi" and st.session_state.analysis_result is not None:
     res: ImpactAnalysisResult = st.session_state.analysis_result
     used_model_name = st.session_state.get("used_model", "tuntematon-malli")
 
@@ -330,7 +416,7 @@ if st.session_state.analysis_result is not None:
         st.markdown(f"- {rec}")
 
     # ==========================================================================
-    # 8. EVALUOINTIOSIO (SUPABASE)
+    # 8. EVALUOINTIOSIO (SUPABASE - VAIN MUUTOSVAIKUTUSANALYYSI-TILASSA)
     # ==========================================================================
     st.markdown("---")
     st.subheader("Asiantuntijan evaluointi (Opinnäytetyön aineistonkeruu)")
@@ -360,7 +446,7 @@ if st.session_state.analysis_result is not None:
                     datetime.now().isoformat(),
                     used_model_name,
                     scenario_choice,
-                    change_proposal,
+                    user_input,
                     res.overall_risk,
                     eval_rating,
                     eval_comments
