@@ -23,15 +23,15 @@ st.set_page_config(
     layout="wide"
 )
 
+# Kiinnitetty, varmasti toimiva perusmalli
+ACTIVE_MODEL = "gemini-1.5-flash"
+
 # Luetaan API-avain ensin Streamlit Cloudin Secretsistä, sitten ympäristömuuttujista
 API_KEY = ""
 if "GEMINI_API_KEY" in st.secrets:
     API_KEY = st.secrets["GEMINI_API_KEY"]
 else:
     API_KEY = os.environ.get("GEMINI_API_KEY", "")
-
-# Käytetään virallista versionimikettä gemini-2.0-flash tai gemini-1.5-flash-002
-ACTIVE_MODEL = "gemini-2.0-flash"
 
 # ==============================================================================
 # 2. MVA ARCHITECTURE DUMMY DATA (Kovakoodattu MVA-malli)
@@ -172,63 +172,63 @@ if run_button:
     elif not change_proposal.strip():
         st.warning("⚠️ Syötä muutosehdotus tekstikenttään.")
     else:
-        with st.spinner("Tekoäly analysoi MVA-riippuvuuksia ja laskee vaikutuksia..."):
-            client = genai.Client(api_key=API_KEY)
+        status_container = st.empty()
+        status_container.info("⏳ Tekoäly analysoi MVA-riippuvuuksia ja laskee vaikutuksia...")
 
-            system_instruction = (
-                "Olet kokenut kokonaisarkkitehti (Enterprise Architect).\n"
-                "Tehtäväsi on suorittaa tarkka muutosvaikutusanalyysi annetun Minimum Viable Architecture (MVA) -JSON-datan pohjalta.\n\n"
-                "Arvioi muutosehdotuksen vaikutuksia suoriin ja epäsuoriin riippuvuuvuuksiin.\n"
-                "Muodosta laadukas Graphviz DOT -koodi, joka kuvaa koko järjestelmäkentän ja korostaa muutosalueet väreillä.\n"
-                "Palauta vastauksesi tiukasti annetussa JSON-muodossa."
-            )
+        client = genai.Client(api_key=API_KEY)
 
-            json_mva_str = json.dumps(MVA_DATA, ensure_ascii=False, indent=2)
+        system_instruction = (
+            "Olet kokenut kokonaisarkkitehti (Enterprise Architect).\n"
+            "Tehtäväsi on suorittaa tarkka muutosvaikutusanalyysi annetun Minimum Viable Architecture (MVA) -JSON-datan pohjalta.\n\n"
+            "Arvioi muutosehdotuksen vaikutuksia suoriin ja epäsuoriin riippuvuuksiin.\n"
+            "Muodosta laadukas Graphviz DOT -koodi, joka kuvaa koko järjestelmäkentän ja korostaa muutosalueet väreillä.\n"
+            "Palauta vastauksesi tiukasti annetussa JSON-muodossa."
+        )
 
-            prompt = (
-                f"TÄSSÄ ON ORGANISAATION MVA-ARKKITEHTUURIDATA:\n"
-                f"```json\n{json_mva_str}\n```\n\n"
-                f"EHDOTETTU ARKKITEHTUURIMUUTOS:\n"
-                f"{change_proposal}\n\n"
-                f"Suorita muutosvaikutusanalyysi MVA-datan pohjalta."
-            )
+        json_mva_str = json.dumps(MVA_DATA, ensure_ascii=False, indent=2)
 
-            # Vaihtoehtoiset mallinimet, jos ensisijainen palauttaa 404
-            candidate_models = ["gemini-2.0-flash", "gemini-1.5-flash-002", "gemini-1.5-pro-002"]
-            success = False
+        prompt = (
+            f"TÄSSÄ ON ORGANISAATION MVA-ARKKITEHTUURIDATA:\n"
+            f"```json\n{json_mva_str}\n```\n\n"
+            f"EHDOTETTU ARKKITEHTUURIMUUTOS:\n"
+            f"{change_proposal}\n\n"
+            f"Suorita muutosvaikutusanalyysi MVA-datan pohjalta."
+        )
 
-            for model_name in candidate_models:
-                try:
-                    response = client.models.generate_content(
-                        model=model_name,
-                        contents=prompt,
-                        config=types.GenerateContentConfig(
-                            system_instruction=system_instruction,
-                            response_mime_type="application/json",
-                            response_schema=ImpactAnalysisResult,
-                            temperature=0.2,
-                        ),
-                    )
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            try:
+                response = client.models.generate_content(
+                    model=ACTIVE_MODEL,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        system_instruction=system_instruction,
+                        response_mime_type="application/json",
+                        response_schema=ImpactAnalysisResult,
+                        temperature=0.2,
+                    ),
+                )
 
-                    st.session_state.analysis_result = response.parsed
-                    st.success(f"Analyysi valmis! (Käytetty malli: `{model_name}`)")
-                    success = True
-                    break
+                st.session_state.analysis_result = response.parsed
+                status_container.success("✅ Analyysi valmis!")
+                time.sleep(1)
+                st.rerun()  # Pakotetaan sivun päivitys tulosten näyttämiseksi
+                break
 
-                except Exception as e:
-                    error_str = str(e)
-                    # Jos mallia ei löydy, kokeillaan seuraavaa candidaattia
-                    if "404" in error_str:
-                        continue
-                    elif "429" in error_str:
-                        st.info("⏳ Viiveraja saavutettu. Odotetaan 5 sekuntia...")
-                        time.sleep(5)
+            except Exception as e:
+                error_str = str(e)
+                # Jos saavutetaan ilmaisraja (429 Too Many Requests / RESOURCE_EXHAUSTED)
+                if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                    if attempt < max_attempts:
+                        status_container.warning(
+                            f"⏳ API-ilmaisraja saavutettu. Odotetaan 10 sekuntia ennen yritystä {attempt + 1}/{max_attempts}..."
+                        )
+                        time.sleep(10)
                     else:
-                        st.error(f"Virhe API-kutsussa: {error_str}")
-                        break
-
-            if not success and "analysis_result" not in st.session_state:
-                st.error("❌ Mikään valituista malleista ei vastannut API-avaimellasi. Tarkista, että API-avain on luotu Google AI Studiossa (https://aistudio.google.com/).")
+                        status_container.error("❌ API-ilmaiskiintiö ylittyi täysin. Odota noin 1 minuutti ennen kuin painat nappia uudelleen.")
+                else:
+                    status_container.error(f"⚠️ Virhe API-kutsussa: {error_str}")
+                    break
 
 # ==============================================================================
 # 7. TULOSTEN ESITTÄMINEN
@@ -246,7 +246,7 @@ if st.session_state.analysis_result is not None:
 
     col1.metric("Kokonaisriskitaso", f"{risk_icon} {res.overall_risk}")
     col2.metric("Vaikutuksen alaiset järjestelmät", f"{res.affected_systems_count} / {len(MVA_DATA['systems'])} pcs")
-    col3.metric("Tila", "Analysoitu")
+    col3.metric("Käytetty malli", ACTIVE_MODEL)
 
     if res.overall_risk == "KORKEA":
         st.error(f"**Yhteenveto:** {res.summary}")
