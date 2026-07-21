@@ -15,80 +15,12 @@ except ImportError:
     pass
 
 # ==============================================================================
-# 1. SOVELLUKSEN JA SIVUN ASETUKSET & MUKAUTETTU TEEMA (CSS)
+# 1. SOVELLUKSEN JA SIVUN ASETUKSET
 # ==============================================================================
 st.set_page_config(
     page_title="MVA AI Muutosvaikutusanalyysi",
     layout="wide"
 )
-
-# Rauhoittava, ammattimainen värimaailma CSS:llä
-def inject_custom_theme():
-    st.markdown("""
-        <style>
-        /* Päätausta ja tekstivärit */
-        .stApp {
-            background-color: #f8fafc;
-            color: #1e293b;
-        }
-        
-        /* Sivupalkin tyyli */
-        [data-testid="stSidebar"] {
-            background-color: #f1f5f9;
-            border-right: 1px solid #e2e8f0;
-        }
-
-        /* Otsikot */
-        h1, h2, h3, h4 {
-            color: #0f172a !important;
-            font-weight: 600 !important;
-        }
-
-        /* Ensi-sijainen painike (Primary button) */
-        div.stButton > button[kind="primary"] {
-            background-color: #2563eb !important;
-            color: #ffffff !important;
-            border-radius: 6px !important;
-            border: none !important;
-            font-weight: 500 !important;
-            transition: all 0.2s ease;
-        }
-        div.stButton > button[kind="primary"]:hover {
-            background-color: #1d4ed8 !important;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        }
-
-        /* Tekstikentät ja alasvetovalikot */
-        div[data-baseweb="textarea"] > div, div[data-baseweb="select"] > div {
-            border-radius: 6px !important;
-            border-color: #cbd5e1 !important;
-            background-color: #ffffff !important;
-        }
-
-        /* Expander-osiot */
-        .streamlit-expanderHeader {
-            background-color: #ffffff !important;
-            border-radius: 6px !important;
-            border: 1px solid #e2e8f0 !important;
-            color: #334155 !important;
-        }
-
-        /* Metric-korttien ulkoasu */
-        [data-testid="stMetricValue"] {
-            color: #0f172a !important;
-            font-weight: 600 !important;
-        }
-        [data-testid="stMetric"] {
-            background-color: #ffffff;
-            padding: 12px 16px;
-            border-radius: 8px;
-            border: 1px solid #e2e8f0;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
-inject_custom_theme()
 
 # Luetaan API-avain ensin Streamlit Cloudin Secretsistä, sitten ympäristömuuttujista
 API_KEY = ""
@@ -169,7 +101,7 @@ class ImpactAnalysisResult(BaseModel):
     impacts: list[SystemImpact] = Field(description="Lista kaikista järjestelmistä joihin muutos vaikuttaa")
     recommendations: list[str] = Field(description="3-5 konkreettista jatkotoimenpidesuositusta")
     dot_graph: str = Field(
-        description="Validia Graphviz DOT-koodia riippuvuuskartan visualisointiin. Värjää suoran vaikutuksen solmut pehmeän punaisella (fillcolor='#fecdd3'), epäsuorat pehmeän keltaisella (fillcolor='#fef08a') ja koskemattomat maltillisen harmaalla/vihreällä (fillcolor='#e2e8f0'). Käytä rankdir=LR."
+        description="Validia Graphviz DOT-koodia riippuvuuskartan visualisointiin. Värjää suoran vaikutuksen solmut tumman punaisella / pehmeän punaisella, epäsuorat keltaisella ja koskemattomat maltillisen harmaalla. Käytä rankdir=LR ja varmista tummaan teemaan sopivat tekstivärit solmuissa."
     )
 
 # ==============================================================================
