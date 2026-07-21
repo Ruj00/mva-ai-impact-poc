@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from datetime import datetime
 import streamlit as st
 from pydantic import BaseModel, Field
@@ -21,6 +22,9 @@ st.set_page_config(
     page_icon="🏗️",
     layout="wide"
 )
+
+# Kiinnitetty, varmasti toimiva standardimalli
+ACTIVE_MODEL = "gemini-1.5-flash"
 
 # Luetaan API-avain ensin Streamlit Cloudin Secretsistä, sitten ympäristömuuttujista
 API_KEY = ""
@@ -105,7 +109,7 @@ class ImpactAnalysisResult(BaseModel):
     )
 
 # ==============================================================================
-# 4. SIVUPALKKI (SIDEBAR) - ASETUKSET & SKENAARIOT
+# 4. SIVUPALKKI (SIDEBAR) - TILA & SKENAARIOT
 # ==============================================================================
 st.sidebar.title("⚙️ PoC-Asetukset")
 
@@ -115,12 +119,7 @@ if API_KEY:
 else:
     st.sidebar.error("❌ API-avain puuttuu (Aseta `GEMINI_API_KEY` Streamlit Secretsiin)")
 
-# Mallin valinta (Päivitetty virallisilla Gemini 2.0 / 1.5 -tunnisteilla)
-selected_model = st.sidebar.selectbox(
-    "Valitse Gemini-malli",
-    ["gemini-2.0-flash", "gemini-2.0-pro-exp-02-05", "gemini-1.5-flash-latest"],
-    help="gemini-2.0-flash on uusi nopea vakiomalli."
-)
+st.sidebar.info(f"🤖 **Malli:** `{ACTIVE_MODEL}`")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("📋 Testiskenaariot")
@@ -135,7 +134,6 @@ scenario_choice = st.sidebar.selectbox(
     ]
 )
 
-# Pre-filled texts for scenarios
 scenario_texts = {
     "Skenaario 1: CRM-järjestelmän vaihto SaaS-malliin": 
         "Nykyinen Asiakashallinta (SYS-CRM) korvataan uudella pilvipohjaisella SaaS-järjestelmällä. Vanha SQL-suorarajapinta poistuu ja jatkossa tiedot siirretään REST API:n kautta erillisessä yöajossa.",
@@ -149,7 +147,6 @@ scenario_texts = {
 st.title("🏗️ MVA AI Muutosvaikutusanalyysi (PoC)")
 st.caption("Tekoälyavusteinen arkkitehtuurianalyysi kehysriippumattoman MVA-mallin pohjalta | YAMK Opinnäytetyö")
 
-# Default text logic
 default_text = ""
 if scenario_choice in scenario_texts:
     default_text = scenario_texts[scenario_choice]
@@ -163,7 +160,6 @@ change_proposal = st.text_area(
 
 run_button = st.button("🚀 Aja muutosvaikutusanalyysi", type="primary", use_container_width=True)
 
-# Session state analysis persistence
 if "analysis_result" not in st.session_state:
     st.session_state.analysis_result = None
 
@@ -177,46 +173,53 @@ if run_button:
         st.warning("⚠️ Syötä muutosehdotus tekstikenttään.")
     else:
         with st.spinner("Tekoäly analysoi MVA-riippuvuuksia ja laskee vaikutuksia..."):
-            try:
-                # Alustetaan client ladatulla API-avaimella
-                client = genai.Client(api_key=API_KEY)
+            client = genai.Client(api_key=API_KEY)
 
-                system_instruction = (
-                    "Olet kokenut kokonaisarkkitehti (Enterprise Architect).\n"
-                    "Tehtäväsi on suorittaa tarkka muutosvaikutusanalyysi annetun Minimum Viable Architecture (MVA) -JSON-datan pohjalta.\n\n"
-                    "Arvioi muutosehdotuksen vaikutuksia suoriin ja epäsuoriin riippuvuuksiin.\n"
-                    "Muodosta laadukas Graphviz DOT -koodi, joka kuvaa koko järjestelmäkentän ja korostaa muutosalueet väreillä.\n"
-                    "Palauta vastauksesi tiukasti annetussa JSON-muodossa."
-                )
+            system_instruction = (
+                "Olet kokenut kokonaisarkkitehti (Enterprise Architect).\n"
+                "Tehtäväsi on suorittaa tarkka muutosvaikutusanalyysi annetun Minimum Viable Architecture (MVA) -JSON-datan pohjalta.\n\n"
+                "Arvioi muutosehdotuksen vaikutuksia suoriin ja epäsuoriin riippuvuuksiin.\n"
+                "Muodosta laadukas Graphviz DOT -koodi, joka kuvaa koko järjestelmäkentän ja korostaa muutosalueet väreillä.\n"
+                "Palauta vastauksesi tiukasti annetussa JSON-muodossa."
+            )
 
-                json_mva_str = json.dumps(MVA_DATA, ensure_ascii=False, indent=2)
+            json_mva_str = json.dumps(MVA_DATA, ensure_ascii=False, indent=2)
 
-                prompt = (
-                    f"TÄSSÄ ON ORGANISAATION MVA-ARKKITEHTUURIDATA:\n"
-                    f"```json\n{json_mva_str}\n```\n\n"
-                    f"EHDOTETTU ARKKITEHTUURIMUUTOS:\n"
-                    f"{change_proposal}\n\n"
-                    f"Suorita muutosvaikutusanalyysi MVA-datan pohjalta."
-                )
+            prompt = (
+                f"TÄSSÄ ON ORGANISAATION MVA-ARKKITEHTUURIDATA:\n"
+                f"```json\n{json_mva_str}\n```\n\n"
+                f"EHDOTETTU ARKKITEHTUURIMUUTOS:\n"
+                f"{change_proposal}\n\n"
+                f"Suorita muutosvaikutusanalyysi MVA-datan pohjalta."
+            )
 
-                # API-kutsu Structured Output -määrityksellä
-                response = client.models.generate_content(
-                    model=selected_model,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        system_instruction=system_instruction,
-                        response_mime_type="application/json",
-                        response_schema=ImpactAnalysisResult,
-                        temperature=0.2,
-                    ),
-                )
+            # Sisällytetään automaattinen uudelleenyritys (retry) 429 Rate Limit -tilanteiden varalta
+            max_retries = 2
+            for attempt in range(max_retries):
+                try:
+                    response = client.models.generate_content(
+                        model=ACTIVE_MODEL,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            system_instruction=system_instruction,
+                            response_mime_type="application/json",
+                            response_schema=ImpactAnalysisResult,
+                            temperature=0.2,
+                        ),
+                    )
 
-                # Tallennetaan jäsennelty vastaus Session Stateen
-                st.session_state.analysis_result = response.parsed
-                st.success("Analyysi valmis!")
+                    st.session_state.analysis_result = response.parsed
+                    st.success("Analyysi valmis!")
+                    break
 
-            except Exception as e:
-                st.error(f"Virhe API-kutsussa: {str(e)}")
+                except Exception as e:
+                    error_str = str(e)
+                    if "429" in error_str and attempt < max_retries - 1:
+                        st.info("⏳ Ilmaiskiintiön viiveraja saavutettu. Odotetaan 8 sekuntia ja yritetään uudelleen...")
+                        time.sleep(8)
+                    else:
+                        st.error(f"Virhe API-kutsussa: {error_str}")
+                        break
 
 # ==============================================================================
 # 7. TULOSTEN ESITTÄMINEN
@@ -227,7 +230,6 @@ if st.session_state.analysis_result is not None:
     st.markdown("---")
     st.header("📊 Analyysin tulokset")
 
-    # Metrics Row
     col1, col2, col3 = st.columns(3)
 
     risk_colors = {"KORKEA": "🔴", "KOHTALAINEN": "🟡", "MATALA": "🟢"}
@@ -235,9 +237,8 @@ if st.session_state.analysis_result is not None:
 
     col1.metric("Kokonaisriskitaso", f"{risk_icon} {res.overall_risk}")
     col2.metric("Vaikutuksen alaiset järjestelmät", f"{res.affected_systems_count} / {len(MVA_DATA['systems'])} pcs")
-    col3.metric("Käytetty malli", selected_model)
+    col3.metric("Käytetty malli", ACTIVE_MODEL)
 
-    # Yhteenvetoboksi
     if res.overall_risk == "KORKEA":
         st.error(f"**Yhteenveto:** {res.summary}")
     elif res.overall_risk == "KOHTALAINEN":
@@ -245,7 +246,6 @@ if st.session_state.analysis_result is not None:
     else:
         st.success(f"**Yhteenveto:** {res.summary}")
 
-    # Visualisointi & Yksityiskohdat rinnakkain
     col_left, col_right = st.columns([1, 1])
 
     with col_left:
@@ -289,7 +289,7 @@ if st.session_state.analysis_result is not None:
         if submit_eval:
             eval_entry = {
                 "timestamp": datetime.now().isoformat(),
-                "model": selected_model,
+                "model": ACTIVE_MODEL,
                 "scenario": scenario_choice,
                 "proposal": change_proposal,
                 "ai_overall_risk": res.overall_risk,
@@ -297,7 +297,6 @@ if st.session_state.analysis_result is not None:
                 "eval_comments": eval_comments
             }
 
-            # Tallennetaan paikalliseen json-tiedostoon
             file_path = "evaluations.json"
             evaluations = []
             if os.path.exists(file_path):
