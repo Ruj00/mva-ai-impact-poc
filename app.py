@@ -4,8 +4,16 @@ import time
 from datetime import datetime
 import streamlit as st
 from pydantic import BaseModel, Field
+
+# Google GenAI SDK
 from google import genai
 from google.genai import types
+
+# OpenAI SDK
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None
 
 # Yritetään ladata dotenv paikallista kehitystä varten, jos se on asennettu
 try:
@@ -22,12 +30,18 @@ st.set_page_config(
     layout="wide"
 )
 
-# Luetaan API-avain ensin Streamlit Cloudin Secretsistä, sitten ympäristömuuttujista
-API_KEY = ""
+# Luetaan API-avaimet Streamlit Secretsistä tai ympäristömuuttujista (samalla tyylillä kuin alkuperäinen Gemini-avain)
+GEMINI_API_KEY = ""
 if "GEMINI_API_KEY" in st.secrets:
-    API_KEY = st.secrets["GEMINI_API_KEY"]
+    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 else:
-    API_KEY = os.environ.get("GEMINI_API_KEY", "")
+    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+
+OPENAI_API_KEY = ""
+if "OPENAI_API_KEY" in st.secrets:
+    OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
+else:
+    OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
 # ==============================================================================
 # 2. MVA ARCHITECTURE DUMMY DATA (Kovakoodattu MVA-malli)
@@ -109,13 +123,25 @@ class ImpactAnalysisResult(BaseModel):
 # ==============================================================================
 st.sidebar.title("Asetukset")
 
-# Tilan ilmaisin API-avaimelle
-if API_KEY:
-    st.sidebar.success("API-avain aktiivinen")
-else:
-    st.sidebar.error("API-avain puuttuu (Aseta `GEMINI_API_KEY` Streamlit Secretsiin)")
+# Tekoälyntarjoajan valinta
+ai_provider = st.sidebar.selectbox(
+    "Valitse tekoälymalli",
+    ["Google Gemini", "OpenAI ChatGPT"]
+)
 
-st.sidebar.info("API-versio: `v1` (Stabiili)")
+# Tarkistetaan valitun tarjoajan API-avain automaattisesti taustalta
+if ai_provider == "Google Gemini":
+    if GEMINI_API_KEY:
+        st.sidebar.success("Gemini API-avain aktiivinen")
+    else:
+        st.sidebar.error("Gemini API-avain puuttuu (Aseta `GEMINI_API_KEY` Streamlit Secretsiin)")
+    st.sidebar.info("API-versio: `v1` (Stabiili)")
+else:
+    if OPENAI_API_KEY:
+        st.sidebar.success("ChatGPT API-avain aktiivinen")
+    else:
+        st.sidebar.error("ChatGPT API-avain puuttuu (Aseta `OPENAI_API_KEY` Streamlit Secretsiin)")
+    st.sidebar.info("Käytetty malli: `gpt-4o`")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Testiskenaariot")
@@ -160,23 +186,20 @@ if "analysis_result" not in st.session_state:
     st.session_state.analysis_result = None
 
 # ==============================================================================
-# 6. ANALYYSIN SUORITTAMINEN GEMINI API:LLA
+# 6. ANALYYSIN SUORITTAMINEN VALITULLA API:LLA
 # ==============================================================================
 if run_button:
-    if not API_KEY:
+    if ai_provider == "Google Gemini" and not GEMINI_API_KEY:
         st.error("GEMINI_API_KEY puuttuu! Lisää se Streamlit Cloudin Secrets-asetuksiin muodossa:\n`GEMINI_API_KEY = \"oma_api_avaimesi\"`")
+    elif ai_provider == "OpenAI ChatGPT" and not OPENAI_API_KEY:
+        st.error("OPENAI_API_KEY puuttuu! Lisää se Streamlit Cloudin Secrets-asetuksiin muodossa:\n`OPENAI_API_KEY = \"oma_api_avaimesi\"`")
     elif not change_proposal.strip():
         st.warning("Syötä muutosehdotus tekstikenttään.")
     else:
         status_container = st.empty()
-        status_container.info("Tekoäly analysoi MVA-riippuvuuksia ja laskee vaikutuksia...")
+        status_container.info(f"Tekoäly ({ai_provider}) analysoi MVA-riippuvuuksia ja laskee vaikutuksia...")
 
-        # Pakotetaan SDK käyttämään stabiilia v1-rajapintaa
-        client = genai.Client(
-            api_key=API_KEY,
-            http_options={'api_version': 'v1'}
-        )
-
+        json_mva_str = json.dumps(MVA_DATA, ensure_ascii=False, indent=2)
         system_instruction = (
             "Olet kokenut kokonaisarkkitehti (Enterprise Architect).\n"
             "Tehtäväsi on suorittaa tarkka muutosvaikutusanalyysi annetun Minimum Viable Architecture (MVA) -JSON-datan pohjalta.\n\n"
@@ -184,8 +207,6 @@ if run_button:
             "Muodosta laadukas Graphviz DOT -koodi, joka kuvaa koko järjestelmäkentän ja korostaa muutosalueet väreillä.\n"
             "Palauta vastauksesi tiukasti annetussa JSON-muodossa."
         )
-
-        json_mva_str = json.dumps(MVA_DATA, ensure_ascii=False, indent=2)
 
         prompt = (
             f"TÄSSÄ ON ORGANISAATION MVA-ARKKITEHTUURIDATA:\n"
@@ -195,54 +216,81 @@ if run_button:
             f"Suorita muutosvaikutusanalyysi MVA-datan pohjalta."
         )
 
-        # Testataan toimivat mallinimimuodot
-        model_variants = ["gemini-1.5-flash", "models/gemini-1.5-flash", "gemini-2.0-flash"]
-        
         success = False
-        for model_name in model_variants:
-            try:
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        system_instruction=system_instruction,
-                        response_mime_type="application/json",
-                        response_schema=ImpactAnalysisResult,
-                        temperature=0.2,
-                    ),
-                )
 
-                st.session_state.analysis_result = response.parsed
-                st.session_state.used_model = model_name
-                status_container.success(f"Analyysi valmis! (Malli: `{model_name}`)")
-                time.sleep(1)
-                success = True
-                st.rerun()
-                break
-
-            except Exception as e:
-                error_str = str(e)
-                if "404" in error_str:
-                    continue
-                elif "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-                    status_container.warning("API-ilmaisraja saavutettu. Odotetaan 10 sekuntia ennen retrya...")
-                    time.sleep(10)
-                else:
-                    status_container.error(f"Virhe API-kutsussa: {error_str}")
+        # --- GOOGLE GEMINI KÄSITTELY ---
+        if ai_provider == "Google Gemini":
+            client = genai.Client(
+                api_key=GEMINI_API_KEY,
+                http_options={'api_version': 'v1'}
+            )
+            model_variants = ["gemini-1.5-flash", "models/gemini-1.5-flash", "gemini-2.0-flash"]
+            
+            for model_name in model_variants:
+                try:
+                    response = client.models.generate_content(
+                        model=model_name,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            system_instruction=system_instruction,
+                            response_mime_type="application/json",
+                            response_schema=ImpactAnalysisResult,
+                            temperature=0.2,
+                        ),
+                    )
+                    st.session_state.analysis_result = response.parsed
+                    st.session_state.used_model = model_name
+                    status_container.success(f"Analyysi valmis! (Malli: `{model_name}`)")
+                    time.sleep(1)
+                    success = True
+                    st.rerun()
                     break
 
+                except Exception as e:
+                    error_str = str(e)
+                    if "404" in error_str:
+                        continue
+                    elif "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                        status_container.warning("API-ilmaisraja saavutettu. Odotetaan 10 sekuntia ennen retrya...")
+                        time.sleep(10)
+                    else:
+                        status_container.error(f"Virhe API-kutsussa: {error_str}")
+                        break
+
+        # --- OPENAI CHATGPT KÄSITTELY ---
+        elif ai_provider == "OpenAI ChatGPT":
+            if OpenAI is None:
+                status_container.error("OpenAI-kirjastoa ei ole asennettu. Asenna se komennolla `pip install openai`.")
+            else:
+                try:
+                    openai_client = OpenAI(api_key=OPENAI_API_KEY)
+                    completion = openai_client.beta.chat.completions.parse(
+                        model="gpt-4o",
+                        messages=[
+                            {"role": "system", "content": system_instruction},
+                            {"role": "user", "content": prompt}
+                        ],
+                        response_format=ImpactAnalysisResult,
+                        temperature=0.2,
+                    )
+                    st.session_state.analysis_result = completion.choices[0].message.parsed
+                    st.session_state.used_model = "gpt-4o"
+                    status_container.success("Analyysi valmis! (Malli: `gpt-4o`)")
+                    time.sleep(1)
+                    success = True
+                    st.rerun()
+                except Exception as e:
+                    status_container.error(f"Virhe OpenAI API-kutsussa: {str(e)}")
+
         if not success and "analysis_result" not in st.session_state:
-            status_container.error(
-                "Mikään mallivariantti ei vastannut API-avaimellasi. "
-                "Varmista, että Streamlit Secretsissä ei ole ylimääräisiä heittomerkkejä tai välilyöntejä API-avaimessa."
-            )
+            status_container.error("Analyysin suorittaminen epäonnistui tarkista API-avain ja verkkoyhteys.")
 
 # ==============================================================================
 # 7. TULOSTEN ESITTÄMINEN
 # ==============================================================================
 if st.session_state.analysis_result is not None:
     res: ImpactAnalysisResult = st.session_state.analysis_result
-    used_model_name = st.session_state.get("used_model", "gemini-1.5-flash")
+    used_model_name = st.session_state.get("used_model", "tuntematon-malli")
 
     st.markdown("---")
     st.header("Analyysin tulokset")
