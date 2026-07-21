@@ -14,13 +14,13 @@ load_custom_css()
 from google import genai
 from google.genai import types
 
-# OpenAI SDK (käytetään sekä OpenAI:lle että Groqille, koska Groq on yhteensopiva)
+# OpenAI SDK (käytetään sekä OpenAI:lle että Groqille)
 try:
     from openai import OpenAI
 except ImportError:
     OpenAI = None
 
-# Yritetään ladata dotenv paikallista kehitystä varten, jos se on asennettu
+# Yritetään ladata dotenv paikallista kehitystä varten
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -36,26 +36,12 @@ st.set_page_config(
 )
 
 # Luetaan API-avaimet Streamlit Secretsistä tai ympäristömuuttujista
-GEMINI_API_KEY = ""
-if "GEMINI_API_KEY" in st.secrets:
-    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
-else:
-    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-
-OPENAI_API_KEY = ""
-if "OPENAI_API_KEY" in st.secrets:
-    OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
-else:
-    OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
-
-GROQ_API_KEY = ""
-if "GROQ_API_KEY" in st.secrets:
-    GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
-else:
-    GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY", ""))
+OPENAI_API_KEY = st.secrets.get("OPENAI_API_KEY", os.environ.get("OPENAI_API_KEY", ""))
+GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", os.environ.get("GROQ_API_KEY", ""))
 
 # ==============================================================================
-# 2. MVA ARCHITECTURE DATA LOADER (Hakee aina skriptin omasta kansiosta)
+# 2. MVA ARCHITECTURE DATA LOADER
 # ==============================================================================
 @st.cache_data
 def load_mva_data(file_name="mva_architecture.json"):
@@ -74,9 +60,7 @@ def load_mva_data(file_name="mva_architecture.json"):
         st.error(f"Arkkitehtuuritiedostoa ei löytynyt polusta: {file_path}")
         return None
 
-# Ladataan data muistiin
 MVA_DATA = load_mva_data()
-
 if MVA_DATA is None:
     st.stop()
 
@@ -98,11 +82,11 @@ class ImpactAnalysisResult(BaseModel):
     impacts: list[SystemImpact] = Field(description="Lista kaikista järjestelmistä joihin muutos vaikuttaa")
     recommendations: list[str] = Field(description="3-5 konkreettista jatkotoimenpidesuositusta")
     dot_graph: str = Field(
-        description="Validia Graphviz DOT-koodia riippuvuuskartan visualisointiin. Värjää suoran vaikutuksen solmut tumman punaisella / pehmeän punaisella, epäsuorat keltaisella ja koskemattomat maltillisen harmaalla. Käytä rankdir=LR ja varmista tummaan teemaan sopivat tekstivärit solmuissa."
+        description="Validia Graphviz DOT-koodia riippuvuuskartan visualisointiin. Värjää suoran vaikutuksen solmut tumman punaisella, epäsuorat keltaisella ja koskemattomat harmaalla. Käytä rankdir=LR."
     )
 
 # ==============================================================================
-# 4. SIVUPALKKI (SIDEBAR) - TILA & SKENAARIOT
+# 4. SIVUPALKKI (SIDEBAR)
 # ==============================================================================
 st.sidebar.title("Asetukset")
 
@@ -115,20 +99,17 @@ if ai_provider == "Google Gemini":
     if GEMINI_API_KEY:
         st.sidebar.success("Gemini API-avain aktiivinen")
     else:
-        st.sidebar.error("Gemini API-avain puuttuu (Aseta `GEMINI_API_KEY` Streamlit Secretsiin)")
-    st.sidebar.info("API-versio: `v1` (Stabiili)")
+        st.sidebar.error("Gemini API-avain puuttuu")
 elif ai_provider == "OpenAI ChatGPT":
     if OPENAI_API_KEY:
         st.sidebar.success("ChatGPT API-avain aktiivinen")
     else:
-        st.sidebar.error("ChatGPT API-avain puuttuu (Aseta `OPENAI_API_KEY` Streamlit Secretsiin)")
-    st.sidebar.info("Käytetty malli: `gpt-4o`")
+        st.sidebar.error("ChatGPT API-avain puuttuu")
 else:
     if GROQ_API_KEY:
         st.sidebar.success("Groq API-avain aktiivinen")
     else:
-        st.sidebar.error("Groq API-avain puuttuu (Aseta `GROQ_API_KEY` Streamlit Secretsiin)")
-    st.sidebar.info("Käytetty malli: `llama-3.3-70b-versatile`")
+        st.sidebar.error("Groq API-avain puuttuu")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Testiskenaariot")
@@ -154,20 +135,18 @@ scenario_texts = {
 }
 
 # ==============================================================================
-# 5. PÄÄNÄKYMÄ (MAIN AREA)
+# 5. PÄÄNÄKYMÄ
 # ==============================================================================
 st.title("MVA AI Muutosvaikutusanalyysi (PoC)")
 st.caption("Tekoälyavusteinen arkkitehtuurianalyysi kehysriippumattoman MVA-mallin pohjalta | YAMK Opinnäytetyö")
 
-default_text = ""
-if scenario_choice in scenario_texts:
-    default_text = scenario_texts[scenario_choice]
+default_text = scenario_texts.get(scenario_choice, "")
 
 change_proposal = st.text_area(
     "Syötä ehdotettu arkkitehtuurimuutos tai järjestelmävaihto:",
     value=default_text,
     height=120,
-    placeholder="Kuvaile muutos, esim. 'Järjestelmä X korvataan uudella rajapinnalla...'"
+    placeholder="Kuvaile muutos..."
 )
 
 run_button = st.button("Aja muutosvaikutusanalyysi", type="primary", use_container_width=True)
@@ -176,28 +155,25 @@ if "analysis_result" not in st.session_state:
     st.session_state.analysis_result = None
 
 # ==============================================================================
-# 6. ANALYYSIN SUORITTAMINEN VALITULLA API:LLA
+# 6. ANALYYSIN SUORITTAMINEN
 # ==============================================================================
 if run_button:
     if ai_provider == "Google Gemini" and not GEMINI_API_KEY:
-        st.error("GEMINI_API_KEY puuttuu! Lisää se Streamlit Cloudin Secrets-asetuksiin.")
+        st.error("GEMINI_API_KEY puuttuu!")
     elif ai_provider == "OpenAI ChatGPT" and not OPENAI_API_KEY:
-        st.error("OPENAI_API_KEY puuttuu! Lisää se Streamlit Cloudin Secrets-asetuksiin.")
+        st.error("OPENAI_API_KEY puuttuu!")
     elif ai_provider == "Groq (Llama 3)" and not GROQ_API_KEY:
-        st.error("GROQ_API_KEY puuttuu! Lisää se Streamlit Cloudin Secrets-asetuksiin.")
+        st.error("GROQ_API_KEY puuttuu!")
     elif not change_proposal.strip():
         st.warning("Syötä muutosehdotus tekstikenttään.")
     else:
         status_container = st.empty()
-        status_container.info(f"Tekoäly ({ai_provider}) analysoi MVA-riippuvuuksia, omistajia ja strategista linjaa...")
+        status_container.info(f"Tekoäly ({ai_provider}) analysoi MVA-riippuvuuksia...")
 
         json_mva_str = json.dumps(MVA_DATA, ensure_ascii=False, indent=2)
         system_instruction = (
             "Olet kokenut kokonaisarkkitehti (Enterprise Architect).\n"
-            "Tehtäväsi on suorittaa tarkka muutosvaikutusanalyysi annetun Minimum Viable Architecture (MVA) -JSON-datan pohjalta.\n\n"
-            "Ota huomioon järjestelmien omistajat, kriittisyydet, riippuvuudet sekä organisaation strategiset tavoitteet (strategic_objectives).\n"
-            "Arvioi miten ehdotettu muutos vaikuttaa suoriin ja epäsuoriin riippuvuuksiin sekä strategiaan.\n"
-            "Muodosta laadukas Graphviz DOT -koodi, joka kuvaa koko järjestelmäkentän ja korostaa muutosalueet väreillä.\n"
+            "Tehtäväsi on suorittaa tarkka muutosvaikutusanalyysi annetun Minimum Viable Architecture (MVA) -JSON-datan pohjalta.\n"
             "Palauta vastauksesi tiukasti annetussa JSON-muodossa."
         )
 
@@ -211,13 +187,10 @@ if run_button:
 
         success = False
 
-        # --- GOOGLE GEMINI KÄSITTELY ---
+        # --- GOOGLE GEMINI ---
         if ai_provider == "Google Gemini":
-            client = genai.Client(
-                api_key=GEMINI_API_KEY,
-                http_options={'api_version': 'v1'}
-            )
-            model_variants = ["gemini-1.5-flash", "models/gemini-1.5-flash", "gemini-2.0-flash"]
+            client = genai.Client(api_key=GEMINI_API_KEY)
+            model_variants = ["gemini-2.0-flash", "gemini-1.5-flash"]
             
             for model_name in model_variants:
                 try:
@@ -238,22 +211,20 @@ if run_button:
                     success = True
                     st.rerun()
                     break
-
                 except Exception as e:
                     error_str = str(e)
-                    if "404" in error_str:
-                        continue
-                    elif "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-                        status_container.warning("API-ilmaisraja saavutettu. Odotetaan 10 sekuntia ennen retrya...")
+                    if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                        status_container.warning("API-raja saavutettu. Odotetaan 10s...")
                         time.sleep(10)
                     else:
-                        status_container.error(f"Virhe API-kutsussa: {error_str}")
-                        break
+                        continue
+            if not success:
+                status_container.error("Gemini-kutsu epäonnistui kaikilla malleilla.")
 
-        # --- OPENAI CHATGPT KÄSITTELY ---
+        # --- OPENAI ---
         elif ai_provider == "OpenAI ChatGPT":
             if OpenAI is None:
-                status_container.error("OpenAI-kirjastoa ei ole asennettu. Asenna komennolla `pip install openai`.")
+                status_container.error("OpenAI-kirjastoa ei ole asennettu.")
             else:
                 try:
                     openai_client = OpenAI(api_key=OPENAI_API_KEY)
@@ -273,25 +244,17 @@ if run_button:
                     success = True
                     st.rerun()
                 except Exception as e:
-                    status_container.error(f"Virhe OpenAI API-kutsussa: {str(e)}")
+                    status_container.error(f"Virhe OpenAI API-kutsussa: {e}")
 
-        # --- GROQ KÄSITTELY ---
+        # --- GROQ ---
         elif ai_provider == "Groq (Llama 3)":
             if OpenAI is None:
-                status_container.error("OpenAI-kirjastoa ei ole asennettu (Groq käyttää samaa kirjastoa). Asenna komennolla `pip install openai`.")
+                status_container.error("OpenAI-kirjastoa ei ole asennettu (Groq käyttää samaa).")
             else:
                 try:
-                    groq_client = OpenAI(
-                        api_key=GROQ_API_KEY,
-                        base_url="https://api.groq.com/openai/v1"
-                    )
-                    
+                    groq_client = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
                     schema_json_str = json.dumps(ImpactAnalysisResult.model_json_schema(), ensure_ascii=False, indent=2)
-                    groq_prompt = (
-                        f"{prompt}\n\n"
-                        f"VASTAUSVAATIMUS: Palauta vastauksesi TÄSMÄLLEEN seuraavan JSON-skeeman mukaisena objektina:\n"
-                        f"```json\n{schema_json_str}\n```"
-                    )
+                    groq_prompt = f"{prompt}\n\nVastaa täsmälleen seuraavan JSON-skeeman mukaan:\n```json\n{schema_json_str}\n```"
 
                     completion = groq_client.chat.completions.create(
                         model="llama-3.3-70b-versatile",
@@ -302,21 +265,15 @@ if run_button:
                         response_format={"type": "json_object"},
                         temperature=0.2,
                     )
-                    
-                    raw_content = completion.choices[0].message.content
-                    parsed_data = json.loads(raw_content)
+                    parsed_data = json.loads(completion.choices[0].message.content)
                     st.session_state.analysis_result = ImpactAnalysisResult(**parsed_data)
-                    
                     st.session_state.used_model = "llama-3.3-70b-versatile (Groq)"
-                    status_container.success("Analyysi valmis! (Malli: `llama-3.3-70b-versatile`)")
+                    status_container.success("Analyysi valmis!")
                     time.sleep(1)
                     success = True
                     st.rerun()
                 except Exception as e:
-                    status_container.error(f"Virhe Groq API-kutsussa: {str(e)}")
-
-        if not success and "analysis_result" not in st.session_state:
-            status_container.error("Analyysin suorittaminen epäonnistui tarkista API-avain ja verkkoyhteys.")
+                    status_container.error(f"Virhe Groq API-kutsussa: {e}")
 
 # ==============================================================================
 # 7. TULOSTEN ESITTÄMINEN
@@ -329,7 +286,6 @@ if st.session_state.analysis_result is not None:
     st.header("Analyysin tulokset")
 
     col1, col2, col3 = st.columns(3)
-
     col1.metric("Kokonaisriskitaso", res.overall_risk)
     col2.metric("Vaikutuksen alaiset järjestelmät", f"{res.affected_systems_count} / {len(MVA_DATA['systems'])} kpl")
     col3.metric("Käytetty malli", used_model_name)
@@ -341,7 +297,6 @@ if st.session_state.analysis_result is not None:
     else:
         st.success(f"**Yhteenveto:** {res.summary}")
 
-    # Näytetään strateginen linjaus erillisenä nostona
     with st.expander("Strateginen linjaus ja tavoitteiden arviointi", expanded=True):
         st.write(res.strategic_alignment)
 
@@ -350,15 +305,14 @@ if st.session_state.analysis_result is not None:
     with col_left:
         st.subheader("Vaikutuskartta (Riippuvuudet)")
         try:
-            st.graphviz_chart(res.dot_graph, use_container_width=True)
+            st.graphviz_chart(res.dot_graph)
         except Exception:
-            st.info("Riippuvuuskaavion renderöinti epäonnistui. Näytetään raakakoodi:")
+            st.info("Riippuvuuskaavion renderöinti epäonnistui. Raakakoodi:")
             st.code(res.dot_graph)
 
     with col_right:
         st.subheader("Vaikutukset järjestelmittäin & Omistajat")
         for sys_imp in res.impacts:
-            # Etsitään järjestelmän omistaja JSON-datasta taustatietona
             owner_name = "Ei määritetty"
             for s in MVA_DATA["systems"]:
                 if s["id"] == sys_imp.system_id:
@@ -376,11 +330,11 @@ if st.session_state.analysis_result is not None:
         st.markdown(f"- {rec}")
 
     # ==========================================================================
-    # 8. EVALUOINTIOSIO (SUPABASE PILVITALLENNUS)
+    # 8. EVALUOINTIOSIO (SUPABASE)
     # ==========================================================================
     st.markdown("---")
     st.subheader("Asiantuntijan evaluointi (Opinnäytetyön aineistonkeruu)")
-    st.caption("Arvioi tekoälyn tekemän muutosvaikutusanalyysin laatua ja luotettavuutta. Tiedot tallentuvat Supabase-pilvitietokantaan.")
+    st.caption("Arvioi tekoälyn tekemän muutosvaikutusanalyysin laatua ja luotettavuutta.")
 
     with st.form("eval_form"):
         eval_rating = st.radio(
@@ -389,19 +343,16 @@ if st.session_state.analysis_result is not None:
             horizontal=True
         )
         eval_comments = st.text_area("Asiantuntijan kommentit, havaitut puutteet tai hallusinaatiot:")
-        
         submit_eval = st.form_submit_button("Tallenna evaluointipalaute")
 
         if submit_eval:
+            conn = None
+            cursor = None
             try:
-                # Haetaan tietokannan osoite Streamlit Secretsistä
                 db_url = st.secrets["SUPABASE_DB_URL"]
-                
-                # Avaa yhteys Supabaseen
                 conn = psycopg2.connect(db_url)
                 cursor = conn.cursor()
                 
-                # Tallennetaan tiedot Supabase-tauluun
                 cursor.execute("""
                     INSERT INTO evaluations (timestamp, model, scenario, proposal, ai_overall_risk, eval_rating, eval_comments)
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
@@ -416,9 +367,13 @@ if st.session_state.analysis_result is not None:
                 ))
                 
                 conn.commit()
-                cursor.close()
-                conn.close()
-                
                 st.success("Palaute tallennettu turvallisesti Supabase-pilvitietokantaan!")
             except Exception as e:
+                if conn:
+                    conn.rollback()
                 st.error(f"Virhe tietokantaan tallennuksessa: {e}")
+            finally:
+                if cursor:
+                    cursor.close()
+                if conn:
+                    conn.close()
