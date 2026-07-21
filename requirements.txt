@@ -1,5 +1,6 @@
 streamlit
 google-genai
+openai
 pydantic
-openai>=1.100.0
-psycopg2-binary==2.9.9
+python-dotenv
+psycopg2-binary
