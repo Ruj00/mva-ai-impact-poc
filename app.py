@@ -115,11 +115,11 @@ if API_KEY:
 else:
     st.sidebar.error("❌ API-avain puuttuu (Aseta `GEMINI_API_KEY` Streamlit Secretsiin)")
 
-# Mallin valinta (Päivitetty toimivilla malleilla)
+# Mallin valinta (Päivitetty virallisilla Gemini 2.0 / 1.5 -tunnisteilla)
 selected_model = st.sidebar.selectbox(
     "Valitse Gemini-malli",
-    ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
-    help="Flash on nopeampi kokeiluissa, Pro tarjoaa syvempää päättelykykyä."
+    ["gemini-2.0-flash", "gemini-2.0-pro-exp-02-05", "gemini-1.5-flash-latest"],
+    help="gemini-2.0-flash on uusi nopea vakiomalli."
 )
 
 st.sidebar.markdown("---")
