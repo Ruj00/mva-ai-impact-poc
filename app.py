@@ -88,12 +88,10 @@ class ImpactAnalysisResult(BaseModel):
 # ==============================================================================
 # 4. SIVUPALKKI (SIDEBAR)
 # ==============================================================================
-st.sidebar.title("Asetukset")
-
-st.sidebar.subheader("Toimintatila")
+st.sidebar.subheader("Mitä haluat tehdä?")
 app_mode = st.sidebar.radio(
     "Valitse käyttötapa:",
-    ["Muutosvaikutusanalyysi", "Kysy arkkitehtuurista (QA)"],
+    ["Kysy arkkitehtuurista (QA)", "Muutosvaikutusanalyysi"],
     help="Muutosvaikutusanalyysi analysoi järjestelmämuutosten riskejä ja riippuvuuksia. Kysy arkkitehtuurista -tilassa voit esittää vapaamuotoisia kysymyksiä nykyisestä MVA-datasta."
 )
 
