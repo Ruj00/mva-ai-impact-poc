@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from google import genai
 from google.genai import types
 
-# OpenAI SDK
+# OpenAI SDK (käytetään sekä OpenAI:lle että Groqille, koska Groq on yhteensopiva)
 try:
     from openai import OpenAI
 except ImportError:
@@ -30,7 +30,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Luetaan API-avaimet Streamlit Secretsistä tai ympäristömuuttujista (samalla tyylillä kuin alkuperäinen Gemini-avain)
+# Luetaan API-avaimet Streamlit Secretsistä tai ympäristömuuttujista
 GEMINI_API_KEY = ""
 if "GEMINI_API_KEY" in st.secrets:
     GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
@@ -42,6 +42,12 @@ if "OPENAI_API_KEY" in st.secrets:
     OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
 else:
     OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+
+GROQ_API_KEY = ""
+if "GROQ_API_KEY" in st.secrets:
+    GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+else:
+    GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
 # ==============================================================================
 # 2. MVA ARCHITECTURE DUMMY DATA (Kovakoodattu MVA-malli)
@@ -126,7 +132,7 @@ st.sidebar.title("Asetukset")
 # Tekoälyntarjoajan valinta
 ai_provider = st.sidebar.selectbox(
     "Valitse tekoälymalli",
-    ["Google Gemini", "OpenAI ChatGPT"]
+    ["Google Gemini", "OpenAI ChatGPT", "Groq (Llama 3)"]
 )
 
 # Tarkistetaan valitun tarjoajan API-avain automaattisesti taustalta
@@ -136,12 +142,18 @@ if ai_provider == "Google Gemini":
     else:
         st.sidebar.error("Gemini API-avain puuttuu (Aseta `GEMINI_API_KEY` Streamlit Secretsiin)")
     st.sidebar.info("API-versio: `v1` (Stabiili)")
-else:
+elif ai_provider == "OpenAI ChatGPT":
     if OPENAI_API_KEY:
         st.sidebar.success("ChatGPT API-avain aktiivinen")
     else:
         st.sidebar.error("ChatGPT API-avain puuttuu (Aseta `OPENAI_API_KEY` Streamlit Secretsiin)")
     st.sidebar.info("Käytetty malli: `gpt-4o`")
+else:
+    if GROQ_API_KEY:
+        st.sidebar.success("Groq API-avain aktiivinen")
+    else:
+        st.sidebar.error("Groq API-avain puuttuu (Aseta `GROQ_API_KEY` Streamlit Secretsiin)")
+    st.sidebar.info("Käytetty malli: `llama-3.3-70b-versatile`")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Testiskenaariot")
@@ -190,9 +202,11 @@ if "analysis_result" not in st.session_state:
 # ==============================================================================
 if run_button:
     if ai_provider == "Google Gemini" and not GEMINI_API_KEY:
-        st.error("GEMINI_API_KEY puuttuu! Lisää se Streamlit Cloudin Secrets-asetuksiin muodossa:\n`GEMINI_API_KEY = \"oma_api_avaimesi\"`")
+        st.error("GEMINI_API_KEY puuttuu! Lisää se Streamlit Cloudin Secrets-asetuksiin.")
     elif ai_provider == "OpenAI ChatGPT" and not OPENAI_API_KEY:
-        st.error("OPENAI_API_KEY puuttuu! Lisää se Streamlit Cloudin Secrets-asetuksiin muodossa:\n`OPENAI_API_KEY = \"oma_api_avaimesi\"`")
+        st.error("OPENAI_API_KEY puuttuu! Lisää se Streamlit Cloudin Secrets-asetuksiin.")
+    elif ai_provider == "Groq (Llama 3)" and not GROQ_API_KEY:
+        st.error("GROQ_API_KEY puuttuu! Lisää se Streamlit Cloudin Secrets-asetuksiin.")
     elif not change_proposal.strip():
         st.warning("Syötä muutosehdotus tekstikenttään.")
     else:
@@ -260,7 +274,7 @@ if run_button:
         # --- OPENAI CHATGPT KÄSITTELY ---
         elif ai_provider == "OpenAI ChatGPT":
             if OpenAI is None:
-                status_container.error("OpenAI-kirjastoa ei ole asennettu. Asenna se komennolla `pip install openai`.")
+                status_container.error("OpenAI-kirjastoa ei ole asennettu. Asenna komennolla `pip install openai`.")
             else:
                 try:
                     openai_client = OpenAI(api_key=OPENAI_API_KEY)
@@ -281,6 +295,34 @@ if run_button:
                     st.rerun()
                 except Exception as e:
                     status_container.error(f"Virhe OpenAI API-kutsussa: {str(e)}")
+
+        # --- GROQ KÄSITTELY ---
+        elif ai_provider == "Groq (Llama 3)":
+            if OpenAI is None:
+                status_container.error("OpenAI-kirjastoa ei ole asennettu (Groq käyttää samaa kirjastoa). Asenna komennolla `pip install openai`.")
+            else:
+                try:
+                    groq_client = OpenAI(
+                        api_key=GROQ_API_KEY,
+                        base_url="https://api.groq.com/openai/v1"
+                    )
+                    completion = groq_client.beta.chat.completions.parse(
+                        model="llama-3.3-70b-versatile",
+                        messages=[
+                            {"role": "system", "content": system_instruction},
+                            {"role": "user", "content": prompt}
+                        ],
+                        response_format=ImpactAnalysisResult,
+                        temperature=0.2,
+                    )
+                    st.session_state.analysis_result = completion.choices[0].message.parsed
+                    st.session_state.used_model = "llama-3.3-70b-versatile (Groq)"
+                    status_container.success("Analyysi valmis! (Malli: `llama-3.3-70b-versatile`)")
+                    time.sleep(1)
+                    success = True
+                    st.rerun()
+                except Exception as e:
+                    status_container.error(f"Virhe Groq API-kutsussa: {str(e)}")
 
         if not success and "analysis_result" not in st.session_state:
             status_container.error("Analyysin suorittaminen epäonnistui tarkista API-avain ja verkkoyhteys.")
