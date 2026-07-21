@@ -6,14 +6,28 @@ from pydantic import BaseModel, Field
 from google import genai
 from google.genai import types
 
+# Yritetään ladata dotenv paikallista kehitystä varten, jos se on asennettu
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 # ==============================================================================
-# 1. SOVELLUKSEN JA SIVUN ASETUKSET
+# 1. SOVELLUKSEN JA SIVUN ASETUKSET & API-AVAIN
 # ==============================================================================
 st.set_page_config(
     page_title="MVA AI Impact Analyzer",
     page_icon="🏗️",
     layout="wide"
 )
+
+# Luetaan API-avain ensin Streamlit Cloudin Secretsistä, sitten ympäristömuuttujista
+API_KEY = ""
+if "GEMINI_API_KEY" in st.secrets:
+    API_KEY = st.secrets["GEMINI_API_KEY"]
+else:
+    API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
 # ==============================================================================
 # 2. MVA ARCHITECTURE DUMMY DATA (Kovakoodattu MVA-malli)
@@ -95,19 +109,16 @@ class ImpactAnalysisResult(BaseModel):
 # ==============================================================================
 st.sidebar.title("⚙️ PoC-Asetukset")
 
-# Gemini API Key input
-api_key = st.sidebar.text_input(
-    "Google Gemini API Key",
-    type="password",
-    help="Syötä Google AI Studio API key. Jos tyhjä, koodi yrittää lukea GEMINI_API_KEY-ympäristömuuttujaa."
-)
-if not api_key:
-    api_key = os.environ.get("GEMINI_API_KEY", "")
+# Tilan ilmaisin API-avaimelle
+if API_KEY:
+    st.sidebar.success("🔑 Gemini API-avain aktiivinen")
+else:
+    st.sidebar.error("❌ API-avain puuttuu (Aseta `GEMINI_API_KEY` Streamlit Secretsiin)")
 
 # Mallin valinta
 selected_model = st.sidebar.selectbox(
     "Valitse Gemini-malli",
-    ["gemini-1.5-flash", "gemini-1.5-pro"],
+    ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash", "gemini-1.5-pro"],
     help="Flash on nopeampi kokeiluissa, Pro tarjoaa syvempää päättelykykyä."
 )
 
@@ -160,15 +171,15 @@ if "analysis_result" not in st.session_state:
 # 6. ANALYYSIN SUORITTAMINEN GEMINI API:LLA
 # ==============================================================================
 if run_button:
-    if not api_key:
-        st.error("❌ Syötä Gemini API Key sivupalkkiin ennen analyysin ajamista.")
+    if not API_KEY:
+        st.error("❌ GEMINI_API_KEY puuttuu! Lisää se Streamlit Cloudin Secrets-asetuksiin muodossa:\n`GEMINI_API_KEY = \"oma_api_avaimesi\"`")
     elif not change_proposal.strip():
         st.warning("⚠️ Syötä muutosehdotus tekstikenttään.")
     else:
         with st.spinner("Tekoäly analysoi MVA-riippuvuuksia ja laskee vaikutuksia..."):
             try:
-                # Alustetaan uusi google-genai Client
-                client = genai.Client(api_key=api_key)
+                # Alustetaan client ladatulla API-avaimella
+                client = genai.Client(api_key=API_KEY)
 
                 system_instruction = """
                 Olet kokenut kokonaisarkkitehti (Enterprise Architect). 
@@ -205,7 +216,7 @@ if run_button:
 
                 # Tallennetaan jäsennelty vastaus Session Stateen
                 st.session_state.analysis_result = response.parsed
-                st.success("Analysis valmis!")
+                st.success("Analyysi valmis!")
 
             except Exception as e:
                 st.error(f"Virhe API-kutsussa: {str(e)}")
@@ -289,7 +300,7 @@ if st.session_state.analysis_result is not None:
                 "eval_comments": eval_comments
             }
 
-            # Tallennettaan local json-tiedostoon
+            # Tallennetaan paikalliseen json-tiedostoon
             file_path = "evaluations.json"
             evaluations = []
             if os.path.exists(file_path):
