@@ -148,7 +148,7 @@ else:
 # 5. PÄÄNÄKYMÄ
 # ==============================================================================
 st.title("MVA AI Arkkitehtuuri-assistentti (PoC)")
-st.caption("Tekoälyavusteinen arkkitehtuurianalyysi ja kyselykehys MVA-mallin pohjalta | YAMK Opinnäytetyö")
+#st.caption("Tekoälyavusteinen arkkitehtuurianalyysi ja kyselykehys MVA-mallin pohjalta | YAMK Opinnäytetyö")
 
 if app_mode == "Muutosvaikutusanalyysi":
     default_text = scenario_texts.get(scenario_choice, "")
