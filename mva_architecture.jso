@@ -1,0 +1,51 @@
+{
+  "organization": "Asiantuntijayritys Oy",
+  "version": "1.2",
+  "systems": [
+    {
+      "id": "SYS-CRM",
+      "name": "Asiakashallinta (CRM)",
+      "criticality": "KORKEA",
+      "owner": "Myyntitiimi",
+      "description": "Hallinnoi asiakastietoja ja myyntiputkea.",
+      "upstream_dependencies": [],
+      "downstream_dependencies": ["SYS-LASKU", "SYS-MARKETING"]
+    },
+    {
+      "id": "SYS-LASKU",
+      "name": "Laskutusmoottori",
+      "criticality": "KRIITTINEN",
+      "owner": "Taloushallinto",
+      "description": "Laskujen luonti ja maksuvalvonta.",
+      "upstream_dependencies": ["SYS-CRM"],
+      "downstream_dependencies": ["SYS-ERP", "SYS-BI"]
+    },
+    {
+      "id": "SYS-MARKETING",
+      "name": "Markkinointiautomaatio",
+      "criticality": "KOHTALAINEN",
+      "owner": "Markkinointi",
+      "description": "Sähköpostikampanjat ja liidien pisteytys.",
+      "upstream_dependencies": ["SYS-CRM"],
+      "downstream_dependencies": []
+    },
+    {
+      "id": "SYS-ERP",
+      "name": "Toiminnanohjaus (ERP)",
+      "criticality": "KRIITTINEN",
+      "owner": "Operatiivinen johto",
+      "description": "Resursointi ja projektinhallinta.",
+      "upstream_dependencies": ["SYS-LASKU"],
+      "downstream_dependencies": ["SYS-BI"]
+    },
+    {
+      "id": "SYS-BI",
+      "name": "Raportointi & BI",
+      "criticality": "MATALA",
+      "owner": "Johtoryhmä",
+      "description": "Liiketoiminta-analytiikka ja johdon raportit.",
+      "upstream_dependencies": ["SYS-LASKU", "SYS-ERP"],
+      "downstream_dependencies": []
+    }
+  ]
+}
