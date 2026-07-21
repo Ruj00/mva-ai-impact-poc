@@ -115,10 +115,10 @@ if API_KEY:
 else:
     st.sidebar.error("❌ API-avain puuttuu (Aseta `GEMINI_API_KEY` Streamlit Secretsiin)")
 
-# Mallin valinta
+# Mallin valinta (Päivitetty toimivilla malleilla)
 selected_model = st.sidebar.selectbox(
     "Valitse Gemini-malli",
-    ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash", "gemini-1.5-pro"],
+    ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
     help="Flash on nopeampi kokeiluissa, Pro tarjoaa syvempää päättelykykyä."
 )
 
@@ -194,125 +194,3 @@ if run_button:
                 TÄSSÄ ON ORGANISAATION MVA-ARKKITEHTUURIDATA:
                 ```json
                 {json.dumps(MVA_DATA, ensure_ascii=False, indent=2)}
-                ```
-
-                EHDOTETTU ARKKITEHTUURIMUUTOS:
-                "{change_proposal}"
-
-                Suorita muutosvaikutusanalyysi MVA-datan pohjalta.
-                """
-
-                # API-kutsu Structured Output -määrityksellä
-                response = client.models.generate_content(
-                    model=selected_model,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        system_instruction=system_instruction,
-                        response_mime_type="application/json",
-                        response_schema=ImpactAnalysisResult,
-                        temperature=0.2,
-                    ),
-                )
-
-                # Tallennetaan jäsennelty vastaus Session Stateen
-                st.session_state.analysis_result = response.parsed
-                st.success("Analyysi valmis!")
-
-            except Exception as e:
-                st.error(f"Virhe API-kutsussa: {str(e)}")
-
-# ==============================================================================
-# 7. TULOSTEN ESITTÄMINEN
-# ==============================================================================
-if st.session_state.analysis_result is not None:
-    res: ImpactAnalysisResult = st.session_state.analysis_result
-
-    st.markdown("---")
-    st.header("📊 Analyysin tulokset")
-
-    # Metrics Row
-    col1, col2, col3 = st.columns(3)
-
-    risk_colors = {"KORKEA": "🔴", "KOHTALAINEN": "🟡", "MATALA": "🟢"}
-    risk_icon = risk_colors.get(res.overall_risk, "⚪")
-
-    col1.metric("Kokonaisriskitaso", f"{risk_icon} {res.overall_risk}")
-    col2.metric("Vaikutuksen alaiset järjestelmät", f"{res.affected_systems_count} / {len(MVA_DATA['systems'])} pcs")
-    col3.metric("Käytetty malli", selected_model)
-
-    # Yhteenvetoboksi
-    if res.overall_risk == "KORKEA":
-        st.error(f"**Yhteenveto:** {res.summary}")
-    elif res.overall_risk == "KOHTALAINEN":
-        st.warning(f"**Yhteenveto:** {res.summary}")
-    else:
-        st.success(f"**Yhteenveto:** {res.summary}")
-
-    # Visualisointi & Yksityiskohdat rinnakkain
-    col_left, col_right = st.columns([1, 1])
-
-    with col_left:
-        st.subheader("🕸️ Vaikutuskartta (Riippuvuudet)")
-        try:
-            st.graphviz_chart(res.dot_graph, use_container_width=True)
-        except Exception:
-            st.info("Riippuvuuskaavion renderöinti epäonnistui. Näytetään raakakoodi:")
-            st.code(res.dot_graph)
-
-    with col_right:
-        st.subheader("📋 Vaikutukset järjestelmittäin")
-        for sys_imp in res.impacts:
-            badge = "🔴" if sys_imp.risk_level == "Punainen" else ("🟡" if sys_imp.risk_level == "Keltainen" else "🟢")
-            with st.expander(f"{badge} **{sys_imp.system_name}** ({sys_imp.impact_type} vaikutus)"):
-                st.write(f"**Järjestelmä-ID:** `{sys_imp.system_id}`")
-                st.write(f"**Riskitaso:** {sys_imp.risk_level}")
-                st.write(f"**Kuvaus:** {sys_imp.description}")
-
-    st.subheader("💡 Suositellut toimenpiteet")
-    for rec in res.recommendations:
-        st.markdown(f"- {rec}")
-
-    # ==========================================================================
-    # 8. EVALUOINTIOSIO (LUKU 6 DATA)
-    # ==========================================================================
-    st.markdown("---")
-    st.subheader("🧪 Asiantuntijan evaluointi (Opinnäytetyön aineistonkeruu)")
-    st.caption("Arvioi tekoälyn tekemän muutosvaikutusanalyysin laatua ja luotettavuutta. Tiedot tallentuvat tutkimusaineistoksi.")
-
-    with st.form("eval_form"):
-        eval_rating = st.radio(
-            "Osuiko tekoälyn arviointitulos ja riskitaso oikeaan?",
-            ["Täysin oikein (5/5)", "Osittain oikein (3/5)", "Virheellinen/Puutteellinen (1/5)"],
-            horizontal=True
-        )
-        eval_comments = st.text_area("Asiantuntijan kommentit, havaitut puutteet tai hallusinaatiot:")
-        
-        submit_eval = st.form_submit_button("💾 Tallenna evaluointipalaute")
-
-        if submit_eval:
-            eval_entry = {
-                "timestamp": datetime.now().isoformat(),
-                "model": selected_model,
-                "scenario": scenario_choice,
-                "proposal": change_proposal,
-                "ai_overall_risk": res.overall_risk,
-                "eval_rating": eval_rating,
-                "eval_comments": eval_comments
-            }
-
-            # Tallennetaan paikalliseen json-tiedostoon
-            file_path = "evaluations.json"
-            evaluations = []
-            if os.path.exists(file_path):
-                try:
-                    with open(file_path, "r", encoding="utf-8") as f:
-                        evaluations = json.load(f)
-                except Exception:
-                    evaluations = []
-
-            evaluations.append(eval_entry)
-
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(evaluations, f, ensure_ascii=False, indent=2)
-
-            st.success("✅ Palaute tallennettu onnistuneesti tiedostoon `evaluations.json`!")
