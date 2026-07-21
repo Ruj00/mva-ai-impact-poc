@@ -1,13 +1,13 @@
 {
   "organization": "Asiantuntijayritys Oy",
-  "version": "1.2",
+  "version": "1.3",
   "systems": [
     {
       "id": "SYS-CRM",
       "name": "Asiakashallinta (CRM)",
       "criticality": "KORKEA",
-      "owner": "Myyntitiimi",
-      "description": "Hallinnoi asiakastietoja ja myyntiputkea.",
+      "owner": "Myyntijohtaja",
+      "description": "Hallinnoi asiakastietoja, asiakkuuksia ja myyntiputkea.",
       "upstream_dependencies": [],
       "downstream_dependencies": ["SYS-LASKU", "SYS-MARKETING"]
     },
@@ -15,8 +15,8 @@
       "id": "SYS-LASKU",
       "name": "Laskutusmoottori",
       "criticality": "KRIITTINEN",
-      "owner": "Taloushallinto",
-      "description": "Laskujen luonti ja maksuvalvonta.",
+      "owner": "Talousjohtaja (CFO)",
+      "description": "Laskujen luonti, myyntireskontra ja maksuvalvonta.",
       "upstream_dependencies": ["SYS-CRM"],
       "downstream_dependencies": ["SYS-ERP", "SYS-BI"]
     },
@@ -24,28 +24,63 @@
       "id": "SYS-MARKETING",
       "name": "Markkinointiautomaatio",
       "criticality": "KOHTALAINEN",
-      "owner": "Markkinointi",
-      "description": "Sähköpostikampanjat ja liidien pisteytys.",
+      "owner": "Markkinointipäällikkö",
+      "description": "Sähköpostikampanjat, liidien pisteytys ja verkkosivuanalyytiikka.",
       "upstream_dependencies": ["SYS-CRM"],
       "downstream_dependencies": []
     },
     {
       "id": "SYS-ERP",
-      "name": "Toiminnanohjaus (ERP)",
+      "name": "Toiminnanohjaus & Resursointi (ERP)",
       "criticality": "KRIITTINEN",
-      "owner": "Operatiivinen johto",
-      "description": "Resursointi ja projektinhallinta.",
+      "owner": "Operatiivinen johtaja (COO)",
+      "description": "Asiantuntijoiden tuntikirjaus, resursointi ja projektinhallinta.",
       "upstream_dependencies": ["SYS-LASKU"],
+      "downstream_dependencies": ["SYS-BI", "SYS-HR"]
+    },
+    {
+      "id": "SYS-HR",
+      "name": "HR- ja Osaamisenhallinta",
+      "criticality": "KORKEA",
+      "owner": "HR-johtaja",
+      "description": "Henkilöstötiedot, osaamiskartat, rekrytointi ja kehityskeskustelut.",
+      "upstream_dependencies": ["SYS-ERP"],
       "downstream_dependencies": ["SYS-BI"]
     },
     {
+      "id": "SYS-IAM",
+      "name": "Identiteetin- ja Pääsynhallinta (IAM)",
+      "criticality": "KRIITTINEN",
+      "owner": "IT-päällikkö",
+      "description": "Käyttäjähallinta, Single Sign-On (SSO) ja käyttöoikeuksien elinkaari.",
+      "upstream_dependencies": [],
+      "downstream_dependencies": ["SYS-CRM", "SYS-ERP", "SYS-HR"]
+    },
+    {
       "id": "SYS-BI",
-      "name": "Raportointi & BI",
+      "name": "Raportointi & Strateginen BI",
       "criticality": "MATALA",
-      "owner": "Johtoryhmä",
-      "description": "Liiketoiminta-analytiikka ja johdon raportit.",
-      "upstream_dependencies": ["SYS-LASKU", "SYS-ERP"],
+      "owner": "Toimitusjohtaja (CEO)",
+      "description": "Liiketoiminta-analytiikka, kannattavuusraportit ja strategiset mittarit.",
+      "upstream_dependencies": ["SYS-LASKU", "SYS-ERP", "SYS-HR"],
       "downstream_dependencies": []
+    }
+  ],
+  "strategic_objectives": [
+    {
+      "id": "STRAT-1",
+      "theme": "Kannattava kasvu ja skaalautuvuus",
+      "description": "Automatisoida ja tehostaa laskutus- ja resursointiprosesseja ilman henkilöstön hallinnollisen työn lisääntymistä."
+    },
+    {
+      "id": "STRAT-2",
+      "theme": "Asiantuntijakokemus ja osaamisen johtaminen",
+      "description": "Varmistaa reaaliaikainen näkyvyys henkilöstön osaamiseen, kapasiteettiin ja projektien kuormitukseen."
+    },
+    {
+      "id": "STRAT-3",
+      "theme": "Tietoturva ja vaatimustenmukaisuus",
+      "description": "Keskitetty pääsynhallinta (IAM) ja tiukka tietosuoja kaikissa rajapinnoissa."
     }
   ]
 }
