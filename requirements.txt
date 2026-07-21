@@ -2,3 +2,4 @@ streamlit
 google-genai
 pydantic
 openai>=1.100.0
+psycopg2-binary==2.9.9
