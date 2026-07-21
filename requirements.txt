@@ -1,3 +1,4 @@
 streamlit
 google-genai
 pydantic
+openai>=1.100.0
