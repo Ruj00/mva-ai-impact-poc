@@ -1,0 +1,14 @@
+# Pääteemaväri (esim. painikkeet, valitut otsikot, korostukset)
+primaryColor = "#4EA8DE"
+
+# Sovelluksen päätaustaväri (tummanharmaa/musta)
+backgroundColor = "#121212"
+
+# Paneelien ja sivupalkin (Sidebar) taustaväri
+secondaryBackgroundColor = "#1E1E1E"
+
+# Tekstin väri (valkoinen)
+textColor = "#FFFFFF"
+
+# Fontti (vaihtoehtoina: "sans serif", "serif", "monospace")
+font = "sans serif"
