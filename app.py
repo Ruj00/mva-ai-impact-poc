@@ -50,6 +50,6 @@ if submit_eval:
         cursor.close()
         conn.close()
         
-        st.success("Palaute tallennettu turvallisesti Supabase-pilvitietokantaan!")
+        st.success("Palaute tallennettu turvallisesti tietokantaan!")
     except Exception as e:
         st.error(f"Virhe tietokantaan tallennuksessa: {e}")
