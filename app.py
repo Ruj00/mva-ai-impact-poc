@@ -22,7 +22,7 @@ load_custom_css()
 from google import genai
 from google.genai import types
 
-# OpenAI SDK (käytetään sekä OpenAI:lle että Groqille)
+# OpenAI SDK (Käytetään OpenAI:lle, Groqille ja OpenRouterille)
 try:
     from openai import OpenAI
 except ImportError:
@@ -39,6 +39,7 @@ except ImportError:
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY", ""))
 OPENAI_API_KEY = st.secrets.get("OPENAI_API_KEY", os.environ.get("OPENAI_API_KEY", ""))
 GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", os.environ.get("GROQ_API_KEY", ""))
+OPENROUTER_API_KEY = st.secrets.get("OPENROUTER_API_KEY", os.environ.get("OPENROUTER_API_KEY", ""))
 
 # ==============================================================================
 # 2. MVA ARCHITECTURE DATA LOADER
@@ -124,19 +125,24 @@ st.sidebar.subheader("Tekoälyasetukset")
 
 ai_provider = st.sidebar.selectbox(
     "Valitse tekoälymalli",
-    ["Groq (Llama 3)", "Google Gemini", "OpenAI ChatGPT"]
+    ["OpenRouter (Ilmainen)", "Google Gemini", "Groq (Llama 3)", "OpenAI ChatGPT"]
 )
 
-if ai_provider == "Groq (Llama 3)":
-    if GROQ_API_KEY:
-        st.sidebar.success("Groq API-avain aktiivinen")
+if ai_provider == "OpenRouter (Ilmainen)":
+    if OPENROUTER_API_KEY:
+        st.sidebar.success("OpenRouter API-avain aktiivinen")
     else:
-        st.sidebar.error("Groq API-avain puuttuu")
+        st.sidebar.error("OpenROUTER API-avain puuttuu")
 elif ai_provider == "Google Gemini":
     if GEMINI_API_KEY:
         st.sidebar.success("Gemini API-avain aktiivinen")
     else:
         st.sidebar.error("Gemini API-avain puuttuu")
+elif ai_provider == "Groq (Llama 3)":
+    if GROQ_API_KEY:
+        st.sidebar.success("Groq API-avain aktiivinen")
+    else:
+        st.sidebar.error("Groq API-avain puuttuu")
 else:
     if OPENAI_API_KEY:
         st.sidebar.success("ChatGPT API-avain aktiivinen")
@@ -175,12 +181,14 @@ if "qa_result" not in st.session_state:
 # 6. ANALYYSIN TAI KYSELYN SUORITTAMINEN
 # ==============================================================================
 if run_button:
-    if ai_provider == "Groq (Llama 3)" and not GROQ_API_KEY:
-        st.error("GROQ_API_KEY puuttuu!")
+    if ai_provider == "OpenRouter (Ilmainen)" and not OPENROUTER_API_KEY:
+        st.error("OPENROUTER_API_KEY puuttuu secrets-tiedostosta!")
     elif ai_provider == "Google Gemini" and not GEMINI_API_KEY:
-        st.error("GEMINI_API_KEY puuttuu!")
+        st.error("GEMINI_API_KEY puuttuu secrets-tiedostosta!")
+    elif ai_provider == "Groq (Llama 3)" and not GROQ_API_KEY:
+        st.error("GROQ_API_KEY puuttuu secrets-tiedostosta!")
     elif ai_provider == "OpenAI ChatGPT" and not OPENAI_API_KEY:
-        st.error("OPENAI_API_KEY puuttuu!")
+        st.error("OPENAI_API_KEY puuttuu secrets-tiedostosta!")
     elif not user_input.strip():
         st.warning("Syötä tekstikenttään muutosehdotus tai kysymys.")
     else:
@@ -224,30 +232,128 @@ if run_button:
 
         success = False
 
-        # --- GROQ ---
-        if ai_provider == "Groq (Llama 3)":
+        # --- OPENROUTER (ILMAINEN) ---
+        if ai_provider == "OpenRouter (Ilmainen)":
             if OpenAI is None:
-                status_container.error("OpenAI-kirjastoa ei ole asennettu (Groq käyttää samaa kirjastoa).")
+                status_container.error("OpenAI-kirjastoa ei ole asennettu.")
+            else:
+                try:
+                    openrouter_client = OpenAI(
+                        base_url="https://openrouter.ai/api/v1",
+                        api_key=OPENROUTER_API_KEY,
+                        timeout=30.0
+                    )
+                    
+                    # Kokeillaan täysin ilmaisia malleja järjestyksessä
+                    free_models = [
+                        "meta-llama/llama-3.3-70b-instruct:free",
+                        "google/gemini-2.0-flash-lite-001:free",
+                        "qwen/qwen-2.5-coder-32b-instruct:free"
+                    ]
+                    
+                    for model_name in free_models:
+                        try:
+                            if app_mode == "Muutosvaikutusanalyysi":
+                                schema_json_str = json.dumps(ImpactAnalysisResult.model_json_schema(), ensure_ascii=False)
+                                or_prompt = f"{prompt}\n\nVastaa TÄSMÄLLEEN ja AINOASTAAN seuraavan JSON-skeeman mukaisessa JSON-muodossa:\n```json\n{schema_json_str}\n```"
+
+                                completion = openrouter_client.chat.completions.create(
+                                    model=model_name,
+                                    messages=[
+                                        {"role": "system", "content": system_instruction},
+                                        {"role": "user", "content": or_prompt}
+                                    ],
+                                    response_format={"type": "json_object"},
+                                    temperature=0.2,
+                                    max_tokens=2048
+                                )
+                                raw_content = completion.choices[0].message.content.strip()
+                                if raw_content.startswith("```"):
+                                    raw_content = raw_content.replace("```json", "").replace("```", "").strip()
+                                parsed_data = json.loads(raw_content)
+                                st.session_state.analysis_result = ImpactAnalysisResult(**parsed_data)
+                            else:
+                                completion = openrouter_client.chat.completions.create(
+                                    model=model_name,
+                                    messages=[
+                                        {"role": "system", "content": system_instruction},
+                                        {"role": "user", "content": prompt}
+                                    ],
+                                    temperature=0.2,
+                                    max_tokens=2048
+                                )
+                                st.session_state.qa_result = completion.choices[0].message.content
+
+                            st.session_state.used_model = f"{model_name} (OpenRouter)"
+                            status_container.success(f"Valmis! (Malli: `{model_name}`)")
+                            time.sleep(1)
+                            success = True
+                            st.rerun()
+                            break
+                        except Exception as m_err:
+                            st.sidebar.warning(f"OpenRouter malli {model_name} epäonnistui: {m_err}")
+                            continue
+
+                except Exception as e:
+                    status_container.error(f"Virhe OpenRouter API-kutsussa: {e}")
+
+        # --- GOOGLE GEMINI ---
+        elif ai_provider == "Google Gemini":
+            try:
+                client = genai.Client(api_key=GEMINI_API_KEY)
+                model_variants = ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash"]
+                
+                for model_name in model_variants:
+                    try:
+                        if app_mode == "Muutosvaikutusanalyysi":
+                            config = types.GenerateContentConfig(
+                                system_instruction=system_instruction,
+                                response_mime_type="application/json",
+                                response_schema=ImpactAnalysisResult,
+                                temperature=0.2,
+                            )
+                        else:
+                            config = types.GenerateContentConfig(
+                                system_instruction=system_instruction,
+                                temperature=0.2,
+                            )
+
+                        response = client.models.generate_content(
+                            model=model_name,
+                            contents=prompt,
+                            config=config,
+                        )
+                        
+                        if app_mode == "Muutosvaikutusanalyysi":
+                            st.session_state.analysis_result = response.parsed
+                        else:
+                            st.session_state.qa_result = response.text
+
+                        st.session_state.used_model = model_name
+                        status_container.success(f"Valmis! (Malli: `{model_name}`)")
+                        time.sleep(1)
+                        success = True
+                        st.rerun()
+                        break
+                    except Exception as e:
+                        st.sidebar.warning(f"Gemini {model_name} virhe: {e}")
+                        continue
+            except Exception as e:
+                status_container.error(f"Gemini client -virhe: {e}")
+
+        # --- GROQ ---
+        elif ai_provider == "Groq (Llama 3)":
+            if OpenAI is None:
+                status_container.error("OpenAI-kirjastoa ei ole asennettu.")
             else:
                 try:
                     groq_client = OpenAI(
                         api_key=GROQ_API_KEY, 
-                        base_url="https://api.groq.com/openai/v1",
+                        base_url="[https://api.groq.com/openai/v1](https://api.groq.com/openai/v1)",
                         timeout=20.0
                     )
                     
-                    # Haetaan aktiiviset mallit ja suodatetaan pois Whisper-, Vision- ja Guard-mallit
-                    try:
-                        models_list = groq_client.models.list()
-                        chat_models = [
-                            m.id for m in models_list.data 
-                            if "whisper" not in m.id.lower() 
-                            and "vision" not in m.id.lower()
-                            and "guard" not in m.id.lower()
-                        ]
-                        groq_model = next((m for m in chat_models if "llama" in m.lower()), chat_models[0] if chat_models else "llama3-70b-8192")
-                    except Exception:
-                        groq_model = "llama3-70b-8192"
+                    groq_model = "llama3-70b-8192"
 
                     if app_mode == "Muutosvaikutusanalyysi":
                         schema_json_str = json.dumps(ImpactAnalysisResult.model_json_schema(), ensure_ascii=False)
@@ -261,8 +367,7 @@ if run_button:
                             ],
                             response_format={"type": "json_object"},
                             temperature=0.2,
-                            max_tokens=2048,
-                            timeout=20.0
+                            max_tokens=2048
                         )
                         
                         raw_content = completion.choices[0].message.content.strip()
@@ -279,8 +384,7 @@ if run_button:
                                 {"role": "user", "content": prompt}
                             ],
                             temperature=0.2,
-                            max_tokens=2048,
-                            timeout=20.0
+                            max_tokens=2048
                         )
                         st.session_state.qa_result = completion.choices[0].message.content
 
@@ -290,54 +394,7 @@ if run_button:
                     success = True
                     st.rerun()
                 except Exception as e:
-                    status_container.error(f"Virhe Groq API-kutsussa tai aikakatkaisu: {e}")
-
-        # --- GOOGLE GEMINI ---
-        elif ai_provider == "Google Gemini":
-            client = genai.Client(api_key=GEMINI_API_KEY)
-            model_variants = ["gemini-2.0-flash", "gemini-2.0-flash-lite"]
-            
-            for model_name in model_variants:
-                try:
-                    if app_mode == "Muutosvaikutusanalyysi":
-                        config = types.GenerateContentConfig(
-                            system_instruction=system_instruction,
-                            response_mime_type="application/json",
-                            response_schema=ImpactAnalysisResult,
-                            temperature=0.2,
-                        )
-                    else:
-                        config = types.GenerateContentConfig(
-                            system_instruction=system_instruction,
-                            temperature=0.2,
-                        )
-
-                    response = client.models.generate_content(
-                        model=model_name,
-                        contents=prompt,
-                        config=config,
-                    )
-                    
-                    if app_mode == "Muutosvaikutusanalyysi":
-                        st.session_state.analysis_result = response.parsed
-                    else:
-                        st.session_state.qa_result = response.text
-
-                    st.session_state.used_model = model_name
-                    status_container.success(f"Valmis! (Malli: `{model_name}`)")
-                    time.sleep(1)
-                    success = True
-                    st.rerun()
-                    break
-                except Exception as e:
-                    error_str = str(e)
-                    if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-                        status_container.warning("API-raja saavutettu. Odotetaan 10s...")
-                        time.sleep(10)
-                    else:
-                        continue
-            if not success:
-                status_container.error("Gemini-kutsu epäonnistui kaikilla malleilla.")
+                    status_container.error(f"Virhe Groq API-kutsussa: {e}")
 
         # --- OPENAI ---
         elif ai_provider == "OpenAI ChatGPT":
@@ -355,8 +412,7 @@ if run_button:
                                 {"role": "user", "content": prompt}
                             ],
                             response_format=ImpactAnalysisResult,
-                            temperature=0.2,
-                            timeout=20.0
+                            temperature=0.2
                         )
                         st.session_state.analysis_result = completion.choices[0].message.parsed
                     else:
@@ -366,8 +422,7 @@ if run_button:
                                 {"role": "system", "content": system_instruction},
                                 {"role": "user", "content": prompt}
                             ],
-                            temperature=0.2,
-                            timeout=20.0
+                            temperature=0.2
                         )
                         st.session_state.qa_result = completion.choices[0].message.content
 
@@ -463,7 +518,7 @@ elif app_mode == "Muutosvaikutusanalyysi" and st.session_state.analysis_result i
             conn = None
             cursor = None
             try:
-                db_url = st.secrets["SUPABASE_DB_URL"]
+                db_url = st.secrets.get("SUPABASE_DB_URL", os.environ.get("SUPABASE_DB_URL", ""))
                 conn = psycopg2.connect(db_url)
                 cursor = conn.cursor()
                 
