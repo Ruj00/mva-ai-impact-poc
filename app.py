@@ -7,6 +7,13 @@ import psycopg2
 from pydantic import BaseModel, Field
 from styles import load_custom_css
 
+# ==============================================================================
+# 1. SOVELLUKSEN JA SIVUN ASETUKSET
+# ==============================================================================
+st.set_page_config(
+    page_title="MVA AI Muutosvaikutusanalyysi & QA",
+    layout="wide"
+    
 # Ajetaan tyylit heti sivun konfiguroinnin jälkeen
 load_custom_css()
 
@@ -26,13 +33,6 @@ try:
     load_dotenv()
 except ImportError:
     pass
-
-# ==============================================================================
-# 1. SOVELLUKSEN JA SIVUN ASETUKSET
-# ==============================================================================
-st.set_page_config(
-    page_title="MVA AI Muutosvaikutusanalyysi & QA",
-    layout="wide"
 )
 
 # Luetaan API-avaimet Streamlit Secretsistä tai ympäristömuuttujista
