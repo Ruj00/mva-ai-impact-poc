@@ -119,7 +119,6 @@ if app_mode == "Muutosvaikutusanalyysi":
         ]
     )
 
-# Malli- ja API-asetukset alhaalla
 st.sidebar.markdown("---")
 st.sidebar.subheader("Tekoälyasetukset")
 
@@ -186,7 +185,9 @@ if run_button:
         st.warning("Syötä tekstikenttään muutosehdotus tai kysymys.")
     else:
         status_container = st.empty()
-        json_mva_str = json.dumps(MVA_DATA, ensure_ascii=False, indent=2)
+        
+        # Tiivistetty JSON ilman sisennystä säästää huomattavasti tokeneita
+        json_mva_str = json.dumps(MVA_DATA, ensure_ascii=False)
 
         # Tyhjennetään aiemmat tulokset ajon alussa
         st.session_state.analysis_result = None
@@ -226,7 +227,7 @@ if run_button:
         # --- GROQ ---
         if ai_provider == "Groq (Llama 3)":
             if OpenAI is None:
-                status_container.error("OpenAI-kirjastoa ei ole asennettu.")
+                status_container.error("OpenAI-kirjastoa ei ole asennettu (Groq käyttää samaa kirjastoa).")
             else:
                 try:
                     groq_client = OpenAI(
@@ -235,17 +236,23 @@ if run_button:
                         timeout=20.0
                     )
                     
-                    # Haetaan mallit ja suodatetaan pois ääni/whisper-mallit
-                    models_list = groq_client.models.list()
-                    chat_models = [m.id for m in models_list.data if "whisper" not in m.id.lower()]
-                    
-                    # Esitään Llama-tekstimalleista ensisijainen tai otetaan ensimmäinen tekstimalli
-                    groq_model = next((m for m in chat_models if "llama" in m.lower()), chat_models[0])
-        
+                    # Haetaan aktiiviset mallit ja suodatetaan pois Whisper-, Vision- ja Guard-mallit
+                    try:
+                        models_list = groq_client.models.list()
+                        chat_models = [
+                            m.id for m in models_list.data 
+                            if "whisper" not in m.id.lower() 
+                            and "vision" not in m.id.lower()
+                            and "guard" not in m.id.lower()
+                        ]
+                        groq_model = next((m for m in chat_models if "llama" in m.lower()), chat_models[0] if chat_models else "llama3-70b-8192")
+                    except Exception:
+                        groq_model = "llama3-70b-8192"
+
                     if app_mode == "Muutosvaikutusanalyysi":
-                        schema_json_str = json.dumps(ImpactAnalysisResult.model_json_schema(), ensure_ascii=False, indent=2)
+                        schema_json_str = json.dumps(ImpactAnalysisResult.model_json_schema(), ensure_ascii=False)
                         groq_prompt = f"{prompt}\n\nVastaa täsmälleen seuraavan JSON-skeeman mukaan:\n```json\n{schema_json_str}\n```"
-        
+
                         completion = groq_client.chat.completions.create(
                             model=groq_model,
                             messages=[
@@ -254,6 +261,7 @@ if run_button:
                             ],
                             response_format={"type": "json_object"},
                             temperature=0.2,
+                            max_tokens=2048,
                             timeout=20.0
                         )
                         
@@ -271,12 +279,13 @@ if run_button:
                                 {"role": "user", "content": prompt}
                             ],
                             temperature=0.2,
+                            max_tokens=2048,
                             timeout=20.0
                         )
                         st.session_state.qa_result = completion.choices[0].message.content
-        
+
                     st.session_state.used_model = f"{groq_model} (Groq)"
-                    status_container.success("Valmis!")
+                    status_container.success(f"Valmis! (Malli: `{groq_model}`)")
                     time.sleep(1)
                     success = True
                     st.rerun()
