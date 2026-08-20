@@ -235,12 +235,12 @@ if run_button:
                         timeout=20.0
                     )
                     
-                    # Haetaan tilillesi aktiiviset mallit automaattisesti
+                    # Haetaan mallit ja suodatetaan pois ääni/whisper-mallit
                     models_list = groq_client.models.list()
-                    active_ids = [m.id for m in models_list.data]
+                    chat_models = [m.id for m in models_list.data if "whisper" not in m.id.lower()]
                     
-                    # Valitaan 70b/versatile-malli tai pudotaan ensimmäiseen Llama-malliin
-                    groq_model = next((m for m in active_ids if "70b" in m or "versatile" in m), active_ids[0])
+                    # Esitään Llama-tekstimalleista ensisijainen tai otetaan ensimmäinen tekstimalli
+                    groq_model = next((m for m in chat_models if "llama" in m.lower()), chat_models[0])
         
                     if app_mode == "Muutosvaikutusanalyysi":
                         schema_json_str = json.dumps(ImpactAnalysisResult.model_json_schema(), ensure_ascii=False, indent=2)
