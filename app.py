@@ -381,52 +381,52 @@ if run_button:
           status_container.error(f"Virhe OpenRouter API-kutsussa: {e}")
 
     # --- GOOGLE GEMINI ---
-    elif ai_provider == "Google Gemini":
-      try:
-        client = genai.Client(api_key=GEMINI_API_KEY)
-        model_variants = [
-            "gemini-2.0-flash",
-            "gemini-2.0-flash-lite",
-            "gemini-1.5-flash",
-        ]
-
-        for model_name in model_variants:
-          try:
-            if app_mode == "Muutosvaikutusanalyysi":
-              config = types.GenerateContentConfig(
-                  system_instruction=system_instruction,
-                  response_mime_type="application/json",
-                  response_schema=ImpactAnalysisResult,
-                  temperature=0.2,
+      elif ai_provider == "Google Gemini":
+        try:
+          client = genai.Client(api_key=GEMINI_API_KEY)
+          # Päivitetyt aktiiviset Gemini 3.x -mallit
+          model_variants = [
+              "gemini-3.7-flash",
+              "gemini-3.6-flash",
+              "gemini-3.5-flash",
+              "gemini-3.5-flash-lite",
+          ]
+  
+          for model_name in model_variants:
+            try:
+              if app_mode == "Muutosvaikutusanalyysi":
+                config = types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    response_mime_type="application/json",
+                    response_schema=ImpactAnalysisResult,
+                )
+              else:
+                config = types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                )
+  
+              response = client.models.generate_content(
+                  model=model_name,
+                  contents=prompt,
+                  config=config,
               )
-            else:
-              config = types.GenerateContentConfig(
-                  system_instruction=system_instruction,
-                  temperature=0.2,
-              )
-
-            response = client.models.generate_content(
-                model=model_name,
-                contents=prompt,
-                config=config,
-            )
-
-            if app_mode == "Muutosvaikutusanalyysi":
-              st.session_state.analysis_result = response.parsed
-            else:
-              st.session_state.qa_result = response.text
-
-            st.session_state.used_model = model_name
-            status_container.success(f"Valmis! (Malli: `{model_name}`)")
-            time.sleep(1)
-            success = True
-            st.rerun()
-            break
-          except Exception as e:
-            st.sidebar.warning(f"Gemini {model_name} virhe: {e}")
-            continue
-      except Exception as e:
-        status_container.error(f"Gemini client -virhe: {e}")
+  
+              if app_mode == "Muutosvaikutusanalyysi":
+                st.session_state.analysis_result = response.parsed
+              else:
+                st.session_state.qa_result = response.text
+  
+              st.session_state.used_model = model_name
+              status_container.success(f"Valmis! (Malli: `{model_name}`)")
+              time.sleep(1)
+              success = True
+              st.rerun()
+              break
+            except Exception as e:
+              st.sidebar.warning(f"Gemini {model_name} virhe: {e}")
+              continue
+        except Exception as e:
+          status_container.error(f"Gemini client -virhe: {e}")
 
     # --- GROQ ---
     elif ai_provider == "Groq (Llama 3)":
