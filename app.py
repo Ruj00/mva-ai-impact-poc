@@ -125,12 +125,12 @@ st.sidebar.subheader("Tekoälyasetukset")
 
 ai_provider = st.sidebar.selectbox(
     "Valitse tekoälymalli",
-    ["Groq (Llama 3)", "Google Gemini", "OpenAI ChatGPT"]
+    ["Grok (Llama 3)", "Google Gemini", "OpenAI ChatGPT"]
 )
 
 if ai_provider == "Groq (Llama 3)":
     if GROQ_API_KEY:
-        st.sidebar.success("Groq API-avain aktiivinen")
+        st.sidebar.success("Grok API-avain aktiivinen")
     else:
         st.sidebar.error("Groq API-avain puuttuu")
 elif ai_provider == "Google Gemini":
@@ -223,14 +223,14 @@ if run_button:
 
         success = False
 
-        # --- GROQ ---
+        # --- GROK ---
         if ai_provider == "Groq (Llama 3)":
             if OpenAI is None:
                 status_container.error("OpenAI-kirjastoa ei ole asennettu (Groq käyttää samaa kirjastoa).")
             else:
                 try:
                     groq_client = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
-                    groq_model = "llama-3.3-70b-versatile"
+                    groq_model = "llama-3.1-70b-versatile"
         
                     if app_mode == "Muutosvaikutusanalyysi":
                         schema_json_str = json.dumps(ImpactAnalysisResult.model_json_schema(), ensure_ascii=False, indent=2)
