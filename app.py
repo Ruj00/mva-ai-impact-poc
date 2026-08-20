@@ -235,7 +235,7 @@ if run_button:
                         base_url="https://api.groq.com/openai/v1",
                         timeout=20.0
                     )
-                    groq_model = "llama-3.1-8b-instant"
+                    groq_model = "llama-3.3-70b-versatile"
         
                     if app_mode == "Muutosvaikutusanalyysi":
                         schema_json_str = json.dumps(ImpactAnalysisResult.model_json_schema(), ensure_ascii=False, indent=2)
