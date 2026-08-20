@@ -232,12 +232,15 @@ if run_button:
                 try:
                     groq_client = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
                     
+                    # Valitaan toimiva mallitunniste
+                    groq_model = "llama-3.3-70b-specdec"  # tai "llama3-70b-8192"
+        
                     if app_mode == "Muutosvaikutusanalyysi":
                         schema_json_str = json.dumps(ImpactAnalysisResult.model_json_schema(), ensure_ascii=False, indent=2)
                         groq_prompt = f"{prompt}\n\nVastaa täsmälleen seuraavan JSON-skeeman mukaan:\n```json\n{schema_json_str}\n```"
-
+        
                         completion = groq_client.chat.completions.create(
-                            model="llama-3.3-70b-versatile",
+                            model=groq_model,
                             messages=[
                                 {"role": "system", "content": system_instruction},
                                 {"role": "user", "content": groq_prompt}
@@ -249,7 +252,7 @@ if run_button:
                         st.session_state.analysis_result = ImpactAnalysisResult(**parsed_data)
                     else:
                         completion = groq_client.chat.completions.create(
-                            model="llama-3.3-70b-versatile",
+                            model=groq_model,
                             messages=[
                                 {"role": "system", "content": system_instruction},
                                 {"role": "user", "content": prompt}
@@ -257,8 +260,8 @@ if run_button:
                             temperature=0.2,
                         )
                         st.session_state.qa_result = completion.choices[0].message.content
-
-                    st.session_state.used_model = "llama-3.3-70b-versatile (Groq)"
+        
+                    st.session_state.used_model = f"{groq_model} (Groq)"
                     status_container.success("Valmis!")
                     time.sleep(1)
                     success = True
