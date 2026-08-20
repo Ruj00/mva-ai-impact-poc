@@ -226,16 +226,21 @@ if run_button:
         # --- GROQ ---
         if ai_provider == "Groq (Llama 3)":
             if OpenAI is None:
-                status_container.error("OpenAI-kirjastoa ei ole asennettu (Groq käyttää samaa kirjastoa).")
+                status_container.error("OpenAI-kirjastoa ei ole asennettu.")
             else:
                 try:
-                    # Lisätty timeout client-tasolle (20s) jumittumisen estämiseksi
                     groq_client = OpenAI(
                         api_key=GROQ_API_KEY, 
                         base_url="https://api.groq.com/openai/v1",
                         timeout=20.0
                     )
-                    groq_model = "llama-3.3-70b-versatile"
+                    
+                    # Haetaan tilillesi aktiiviset mallit automaattisesti
+                    models_list = groq_client.models.list()
+                    active_ids = [m.id for m in models_list.data]
+                    
+                    # Valitaan 70b/versatile-malli tai pudotaan ensimmäiseen Llama-malliin
+                    groq_model = next((m for m in active_ids if "70b" in m or "versatile" in m), active_ids[0])
         
                     if app_mode == "Muutosvaikutusanalyysi":
                         schema_json_str = json.dumps(ImpactAnalysisResult.model_json_schema(), ensure_ascii=False, indent=2)
