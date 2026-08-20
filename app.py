@@ -13,7 +13,8 @@ from styles import load_custom_css
 st.set_page_config(
     page_title="MVA AI Muutosvaikutusanalyysi & QA",
     layout="wide"
-    
+)
+
 # Ajetaan tyylit heti sivun konfiguroinnin jälkeen
 load_custom_css()
 
@@ -33,7 +34,6 @@ try:
     load_dotenv()
 except ImportError:
     pass
-)
 
 # Luetaan API-avaimet Streamlit Secretsistä tai ympäristömuuttujista
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY", ""))
