@@ -232,8 +232,8 @@ if run_button:
                 try:
                     groq_client = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
                     
-                    # Valitaan toimiva mallitunniste
-                    groq_model = "llama-3.3-70b-specdec"  # tai "llama3-70b-8192"
+                    # Päivitetty toimiva mallitunniste
+                    groq_model = "llama-3.3-70b-versatile"
         
                     if app_mode == "Muutosvaikutusanalyysi":
                         schema_json_str = json.dumps(ImpactAnalysisResult.model_json_schema(), ensure_ascii=False, indent=2)
