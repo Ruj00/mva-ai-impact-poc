@@ -125,12 +125,12 @@ st.sidebar.subheader("Tekoälyasetukset")
 
 ai_provider = st.sidebar.selectbox(
     "Valitse tekoälymalli",
-    ["Grok (Llama 3)", "Google Gemini", "OpenAI ChatGPT"]
+    ["Groq (Llama 3)", "Google Gemini", "OpenAI ChatGPT"]
 )
 
 if ai_provider == "Groq (Llama 3)":
     if GROQ_API_KEY:
-        st.sidebar.success("Grok API-avain aktiivinen")
+        st.sidebar.success("Groq API-avain aktiivinen")
     else:
         st.sidebar.error("Groq API-avain puuttuu")
 elif ai_provider == "Google Gemini":
@@ -223,13 +223,18 @@ if run_button:
 
         success = False
 
-        # --- GROK ---
+        # --- GROQ ---
         if ai_provider == "Groq (Llama 3)":
             if OpenAI is None:
                 status_container.error("OpenAI-kirjastoa ei ole asennettu (Groq käyttää samaa kirjastoa).")
             else:
                 try:
-                    groq_client = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
+                    # Lisätty timeout client-tasolle (20s) jumittumisen estämiseksi
+                    groq_client = OpenAI(
+                        api_key=GROQ_API_KEY, 
+                        base_url="https://api.groq.com/openai/v1",
+                        timeout=20.0
+                    )
                     groq_model = "llama-3.1-70b-versatile"
         
                     if app_mode == "Muutosvaikutusanalyysi":
@@ -244,9 +249,9 @@ if run_button:
                             ],
                             response_format={"type": "json_object"},
                             temperature=0.2,
+                            timeout=20.0
                         )
                         
-                        # Siivotaan vastauksesta mahdolliset ylimääräiset Markdown-merkinnät
                         raw_content = completion.choices[0].message.content.strip()
                         if raw_content.startswith("```"):
                             raw_content = raw_content.replace("```json", "").replace("```", "").strip()
@@ -261,6 +266,7 @@ if run_button:
                                 {"role": "user", "content": prompt}
                             ],
                             temperature=0.2,
+                            timeout=20.0
                         )
                         st.session_state.qa_result = completion.choices[0].message.content
         
@@ -270,12 +276,12 @@ if run_button:
                     success = True
                     st.rerun()
                 except Exception as e:
-                    status_container.error(f"Virhe Groq API-kutsussa: {e}")
+                    status_container.error(f"Virhe Groq API-kutsussa tai aikakatkaisu: {e}")
 
         # --- GOOGLE GEMINI ---
         elif ai_provider == "Google Gemini":
             client = genai.Client(api_key=GEMINI_API_KEY)
-            model_variants = ["gemini-2.0-flash", "gemini-1.5-flash"]
+            model_variants = ["gemini-2.0-flash", "gemini-2.0-flash-lite"]
             
             for model_name in model_variants:
                 try:
@@ -325,7 +331,7 @@ if run_button:
                 status_container.error("OpenAI-kirjastoa ei ole asennettu.")
             else:
                 try:
-                    openai_client = OpenAI(api_key=OPENAI_API_KEY)
+                    openai_client = OpenAI(api_key=OPENAI_API_KEY, timeout=20.0)
                     
                     if app_mode == "Muutosvaikutusanalyysi":
                         completion = openai_client.beta.chat.completions.parse(
@@ -336,6 +342,7 @@ if run_button:
                             ],
                             response_format=ImpactAnalysisResult,
                             temperature=0.2,
+                            timeout=20.0
                         )
                         st.session_state.analysis_result = completion.choices[0].message.parsed
                     else:
@@ -346,6 +353,7 @@ if run_button:
                                 {"role": "user", "content": prompt}
                             ],
                             temperature=0.2,
+                            timeout=20.0
                         )
                         st.session_state.qa_result = completion.choices[0].message.content
 
